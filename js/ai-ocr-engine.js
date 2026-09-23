@@ -115,9 +115,12 @@
 
 0. DOCUMENT ARCHETYPE LAYOUT TAG & SECTION BREAK (MANDATORY):
    - LINE 1 OF OUTPUT MUST BE THE EXACT LAYOUT TAG based on document visual layout:
-     * Combined Exam (both Creative Questions & MCQ present): [LAYOUT: COMBINED_EXAM]
-     * Creative Questions (CQ 70 marks) only: [LAYOUT: CQ_BOOKLET]
-     * Multiple Choice Questions (MCQ 30 marks) only: [LAYOUT: MCQ_2COL]
+     * Combined Exam (both Creative Questions & 20-30 MCQs present): [LAYOUT: COMBINED_EXAM]
+     * Creative Questions (CQ 70 marks, Class 6-12) only: [LAYOUT: CQ_BOOKLET]
+     * Multiple Choice Questions (STRICT MANDATE: ONLY if 100% of questions are MCQs OR there are 20-30 MCQs): [LAYOUT: MCQ_2COL]
+       -> CRITICAL: NEVER use [LAYOUT: MCQ_2COL] for general or primary exam papers just because 1 question has multiple choice options!
+     * Standard 2-Column Bengali Question Paper / Primary Exam (Class 1-5) / Short Questions: [LAYOUT: QUESTION_2COL]
+       -> Use this for general exam papers, Class 1-5 primary exam questions, short questions (সংক্ষিপ্ত প্রশ্ন), fill-in-the-blanks, true/false, matchings, etc.
      * Mathematics / Science / Chemistry with equations: [LAYOUT: MATH_SCIENCE]
      * Official Government / Institutional Notice / Memo: [LAYOUT: OFFICIAL_NOTICE]
      * Legal Deed / 300 Tk Non-Judicial Stamp Contract: [LAYOUT: LEGAL_DEED]
@@ -199,6 +202,13 @@
     - SEQUENTIAL QUESTION NUMBERING (ক্রমিক নম্বর নতুনভাবে পুনর্বিন্যাস): মূল ছবিতে বা পিডিএফে প্রশ্নের ক্রমিক নম্বরে অমিল বা কমবেশি থাকলেও আপনি আউটপুটে প্রতিটি প্রশ্নের ক্রমিক নম্বর নতুনভাবে ১ থেকে শুরু করে ক্রমানুসারে (১।, ২।, ৩।, ৪।, ... ১০।) সাজিয়ে লিখবেন। কোনো ফাঁক বা ভুল ক্রমিক রাখা যাবে না।
     - Format sub-questions (উদ্দীপক, ১।, ক., খ., গ., ঘ.) cleanly and beautifully.
     - PLAIN SCORE MARKS (NO BRACKETS): Do NOT use square brackets [] or parentheses () for question marks/scores! Write ONLY plain numbers (যেমন: ১, ২, ৩, ৪ বা ১০) preceded by a tab (\t) or space e.g. ক. ...\t১, খ. ...\t২, গ. ...\t৩, ঘ. ...\t৪ or \t১০. NEVER use [১], [২], (১), (২) brackets!
+
+14. PRIMARY EXAMS (CLASS 1-5) & SHORT QUESTIONS (১ম থেকে ৫ম শ্রেণি ও সাধারণ সংক্ষিপ্ত প্রশ্নপত্র):
+    - DO NOT FORCE INTO CREATIVE FORMAT (কোনো কৃত্রিম ক, খ, গ, ঘ বা উদ্দীপক রূপান্তর সম্পূর্ণ নিষিদ্ধ):
+      * সাধারণত সৃজনশীল প্রশ্ন ও বহুনির্বাচনী প্রশ্ন ৬ষ্ঠ থেকে ১২শ শ্রেণি পর্যন্ত হয়। ১ম থেকে ৫ম শ্রেণির প্রশ্ন এবং অন্যান্য সাধারণ প্রশ্ন ছোট প্রশ্ন বা সাধারণ প্রশ্ন হয়ে থাকে।
+      * ১ম থেকে ৫ম শ্রেণির প্রশ্ন বা সাধারণ ছোট প্রশ্নগুলোকে কখনোই জোর করে সৃজনশীলের মতো 'ক, খ, গ, ঘ' বা উদ্দীপক (>) ফরম্যাটে ফেলবেন না!
+      * মূল প্রশ্নপত্রে যেভাবে ছাপা আছে (যেমন: ১। সঠিক উত্তরটি লিখ:, ২। এক কথায় উত্তর দাও:, ৩। কবিতাটি পড়ে নিচের প্রশ্নের উত্তর দাও:, ৪। শূন্যস্থান পূরণ কর:, অথবা i, ii, iii বা ক., খ. যদি মূল ফাইলে থাকে) ঠিক হুবহু সেই স্বাভাবিক ফরম্যাট ও ক্রমিক বজায় রাখুন।
+      * এগুলোর ক্ষেত্রে শুধুমাত্র পেজ ডিজাইন ও ২-কলাম ফরম্যাট প্রযোজ্য হবে, ভেতরের প্রশ্নগুলোকে কৃত্রিম সৃজনশীলে বদলানো যাবে না।
 
 15. SHORT QUESTIONS (সংক্ষিপ্ত ও অতি সংক্ষিপ্ত প্রশ্নপত্র):
     - সংক্ষিপ্ত প্রশ্ন, অতি সংক্ষিপ্ত প্রশ্ন বা এক কথায় উত্তরের ক্ষেত্রেও ক্রমিক নম্বর সতন্ত্রভাবে ১., ২., ৩., ... থেকে শুরু করতে হবে।
@@ -303,7 +313,7 @@ SPECIFIC DEFECTS YOU MUST AUDIT AND FIX:
      * বাংলা, গণিত ও বিজ্ঞান বিষয়ের ক্ষেত্রে প্রশ্নের ক্রমিক নম্বর এর পর অবশ্যই '।' (দাড়ি) ব্যবহার করবেন (যেমন: ১।, ২।, ৩।, ... ১০।)। (তবে ইংরেজি বিষয়ের ক্ষেত্রে স্বাভাবিক ইংরেজি ফরম্যাট '1.', '2.' অপরিবর্তিত রাখবেন)।
      * সৃজনশীল প্রশ্ন: ১।, ২।, ৩।, ... প্রতিটি উপ-প্রশ্ন ডট ফরম্যাটে ক., খ., গ., ঘ. (বন্ধনী ছাড়া, শুরুতে কোনো ট্যাব থাকবে না)।
      * বহুনির্বাচনী প্রশ্ন: সতন্ত্রভাবে ১।, ২।, ৩।, ... (সৃজনশীলের সাথে মিলিয়ে নয়)। ক্রমিক নম্বরের নিচে রোমান সংখ্যা বা তালিকার শুরুতে \t সহ \ti. ..., \tii. ...। প্রতিটি অপশন লাইনে শুরুতে \t এবং মাঝে \t সহ ডট ফরম্যাট \tক. ...\tখ. ...\tগ. ...\tঘ. ...।
-     * সংক্ষিপ্ত প্রশ্ন: সতন্ত্রভাবে ১।, ২।, ৩।, ...
+     * সংক্ষিপ্ত ও প্রাথমিক প্রশ্ন (১ম থেকে ৫ম শ্রেণি): সতন্ত্রভাবে ১।, ২।, ৩।, ...। কোনোভাবেই জোর করে সৃজনশীলের মতো 'ক, খ, গ, ঘ' বা উদ্দীপক (>) বানাবেন না; মূল ফাইলের স্বাভাবিক প্রশ্ন ও উপ-প্রশ্ন বজায় রাখুন।
      * রাসায়নিক সংকেত ও সমীকরণ: বিজ্ঞানের সকল রাসায়নিক সংকেত ও যৌগ (যেমন: $KNO_3$, $KOH$, $2H_2O$, $H_2SO_4$, $CO_2$, $N_2 + 3H_2 = 2NH_3$ ইত্যাদি) এবং বৈজ্ঞানিক ঘাত ($6.023 \\times 10^{23}$) সাবস্ক্রিপ্ট ও সুপারস্ক্রিপ্ট সহ বাধ্যতামূলকভাবে LaTeX ($...$) ব্লকে রাখবেন; কোনো অবস্থাতেই এগুলোকে সাধারণ টেক্সটে বা ভাঙা লাইনে রাখবেন না। বিক্রিয়ার তীর চিহ্ন সরাসরি '→' বা '──[...]──>' লিখবেন।
      * সার্বজনীন স্ক্রিপ্ট ও ডিজিট অডিট (Universal Script & Digit Fidelity): সৃজনশীল উদ্দীপক, উপ-প্রশ্ন (ক., খ., গ., ঘ.), বহুনির্বাচনী, সংক্ষিপ্ত প্রশ্ন বা ফর্ম—যেকোনো কাজের ক্ষেত্রে মূল ছবিতে যেখানেই ইংরেজি অক্ষর, প্রতীক বা সংখ্যা (যেমন: A, B, C, Cu, Fe, FeCl3, 20, 4, 6 বা অপশনে 1, 2, 9, 10 বা 0, 1, 2, 3) রয়েছে, খসড়ায় তা ভুলবশত বাংলায় রূপান্তর হয়ে থাকলে অবশ্যই মূল ছবির মতো খাঁটি ইংরেজিতে (ASCII English) সংশোধন করুন। ইংরেজি '8' এবং বাংলা '৮' এর মিশ্রণ (যেমন: 8.8৮ L ❌) দূর করে খাঁটি ইংরেজিতে সংশোধন করুন। বিজ্ঞানের বহুনির্বাচনীতে এককযুক্ত সকল অপশনের সংখ্যা একরূপ খাঁটি ইংরেজিতে রাখবেন।
    - No exam board tags/references (e.g., omit [ঢাকা বোর্ড-২০২৩], [ক্যাডেট কলেজ], [অধ্যায়-৩]).

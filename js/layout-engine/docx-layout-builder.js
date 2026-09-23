@@ -232,6 +232,7 @@
       const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper';
       const isCqPaper = archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq';
       const isCombined = archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq'));
+      const isStandardQuestionPaper = archetypeId === 'bengali_standard_question_paper' || layout.templateId === 'question-2col' || layout.templateId === 'bengali_standard_question_paper' || layout.templateId === 'bengali-standard-question';
 
       let bodyContentXml = '';
 
@@ -306,8 +307,8 @@
         } else {
           bodyContentXml = `${headerXml}\n${bodyElementsXml.join('\n')}\n${sectPrXml}`;
         }
-      } else if (isMcqPaper || (layout.columns === 2 && !isCqPaper)) {
-        // Standalone MCQ Paper (30 marks):
+      } else if (isMcqPaper) {
+        // Standalone MCQ Paper (Strict 20-30 MCQs):
         // Section 1: Header (1 Column, 0.5in margins = 720 dxa) ending with continuous section break
         // Section 2: Questions (2 Columns, 0.2in gap = 288 dxa, solid separator, 0.5in margins = 720 dxa)
         const headerSectPr = `
@@ -328,6 +329,32 @@
           <w:pgSz w:w="11906" w:h="16838"/>
           <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/>
           <w:cols w:num="2" w:space="288" w:sep="1" w:equalWidth="1"/>
+          <w:docGrid w:linePitch="360"/>
+        </w:sectPr>`;
+
+        bodyContentXml = `${headerXml}\n${headerSectPr}\n${bodyElementsXml.join('\n')}\n${questionsSectPr}`;
+      } else if (isStandardQuestionPaper || (layout.columns === 2 && !isCqPaper)) {
+        // Standard 2-Column Bengali Question Paper (Class 1-5 / Short Questions / General):
+        // Section 1: Header (1 Column, 0.5in margins = 720 dxa) ending with continuous section break
+        // Section 2: Questions (2 Columns, 0.25in gap = 360 dxa, solid separator w:sep="1", 0.5in margins = 720 dxa)
+        const headerSectPr = `
+        <w:p>
+          <w:pPr>
+            <w:sectPr>
+              <w:type w:val="continuous"/>
+              <w:pgSz w:w="11906" w:h="16838"/>
+              <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/>
+              <w:cols w:num="1" w:space="720"/>
+              <w:docGrid w:linePitch="360"/>
+            </w:sectPr>
+          </w:pPr>
+        </w:p>`;
+
+        const questionsSectPr = `
+        <w:sectPr>
+          <w:pgSz w:w="11906" w:h="16838"/>
+          <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/>
+          <w:cols w:num="2" w:space="360" w:sep="1" w:equalWidth="1"/>
           <w:docGrid w:linePitch="360"/>
         </w:sectPr>`;
 
@@ -558,6 +585,21 @@
       // If any item has explicit marks, it is a creative subquestion, NOT MCQ!
       const hasMarks = subQuestions.some(s => s.marks && String(s.marks).trim().length > 0);
       if (hasMarks) return null;
+
+      // If any subquestion ends in '?' or contains question words, it is a real question, NOT an MCQ option choice!
+      const hasQuestionSentences = subQuestions.some(s => {
+        const t = (s.text || '').trim();
+        return t.endsWith('?') || t.endsWith('?।') || (t.length > 40 && (t.includes('কী') || t.includes('কি') || t.includes('কেন') || t.includes('কোথায়') || t.includes('কাকে বলে') || t.includes('ব্যাখ্যা কর') || t.includes('আলোচনা কর')));
+      });
+      if (hasQuestionSentences) return null;
+
+      // If there are subquestions beyond 'ঘ' (e.g. ঙ, চ, ছ or e, f, g), it's a list of questions, not 4-choice MCQ!
+      const hasExtendedSubQuestions = subQuestions.some(s => /^(?:\([ঙ-হe-z]\)|[ঙ-হe-z][\.\)])/i.test((s.subId || '').trim()));
+      if (hasExtendedSubQuestions) return null;
+
+      // Check average length of items: MCQ options are short answers (average <= 45 chars)
+      const avgLen = subQuestions.reduce((sum, s) => sum + (s.text || '').trim().length, 0) / subQuestions.length;
+      if (avgLen > 45) return null;
 
       const pattern = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/gi;
 

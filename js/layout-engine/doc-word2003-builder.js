@@ -95,6 +95,7 @@
       const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper';
       const isCqPaper = archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq';
       const isCombined = archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq'));
+      const isStandardQuestionPaper = archetypeId === 'bengali_standard_question_paper' || layout.templateId === 'question-2col' || layout.templateId === 'bengali_standard_question_paper' || layout.templateId === 'bengali-standard-question';
 
       let sections = [];
 
@@ -165,8 +166,8 @@
             html: headerHtml + DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
           });
         }
-      } else if (isMcqPaper || (layout.columns === 2 && !isCqPaper)) {
-        // Standalone MCQ Paper (30 marks):
+      } else if (isMcqPaper) {
+        // Standalone MCQ Paper (Strict 20-30 MCQs):
         // Section 1: Header (1 Column, 0.5in margins)
         sections.push({
           pageSize: 'a4',
@@ -187,6 +188,32 @@
           colGap: '0.2in',
           hasSeparator: true,
           isContinuous: true, // Continuous break directly below header!
+          startWithColumnBreak: false,
+          html: DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
+        });
+      } else if (isStandardQuestionPaper || (layout.columns === 2 && !isCqPaper)) {
+        // Standard 2-Column Bengali Question Paper (Class 1-5 / Short Questions / General):
+        // Section 1: Header (1 Column, 0.5in margins)
+        sections.push({
+          pageSize: 'a4',
+          orientation: 'portrait',
+          margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 1,
+          isContinuous: false,
+          startWithColumnBreak: false,
+          html: headerHtml
+        });
+
+        // Section 2: Questions (2 Columns, 0.25in gap, solid separator, 0.5in margins)
+        // Starts naturally at Column 1 Top (no column skip)
+        sections.push({
+          pageSize: 'a4',
+          orientation: 'portrait',
+          margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 2,
+          colGap: '0.25in',
+          hasSeparator: true,
+          isContinuous: true, // Continuous break directly below header
           startWithColumnBreak: false,
           html: DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
         });
@@ -339,6 +366,21 @@
       // If any item has explicit marks, it is a creative subquestion, NOT MCQ!
       const hasMarks = subQuestions.some(s => s.marks && String(s.marks).trim().length > 0);
       if (hasMarks) return null;
+
+      // If any subquestion ends in '?' or contains question words, it is a real question, NOT an MCQ option choice!
+      const hasQuestionSentences = subQuestions.some(s => {
+        const t = (s.text || '').trim();
+        return t.endsWith('?') || t.endsWith('?।') || (t.length > 40 && (t.includes('কী') || t.includes('কি') || t.includes('কেন') || t.includes('কোথায়') || t.includes('কাকে বলে') || t.includes('ব্যাখ্যা কর') || t.includes('আলোচনা কর')));
+      });
+      if (hasQuestionSentences) return null;
+
+      // If there are subquestions beyond 'ঘ' (e.g. ঙ, চ, ছ or e, f, g), it's a list of questions, not 4-choice MCQ!
+      const hasExtendedSubQuestions = subQuestions.some(s => /^(?:\([ঙ-হe-z]\)|[ঙ-হe-z][\.\)])/i.test((s.subId || '').trim()));
+      if (hasExtendedSubQuestions) return null;
+
+      // Check average length of items: MCQ options are short answers (average <= 45 chars)
+      const avgLen = subQuestions.reduce((sum, s) => sum + (s.text || '').trim().length, 0) / subQuestions.length;
+      if (avgLen > 45) return null;
 
       const pattern = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/gi;
 
@@ -604,7 +646,7 @@
                   html += `<p class="MsoNormal" style="margin-left:11.7pt;font-weight:bold;margin-bottom:2pt;line-height:normal;">${formatMath(sub.text)}</p>`;
                 } else {
                   const sId = (sub.subId || '').trim();
-                  const sIdFormatted = sId ? (sId.endsWith('.') ? sId : sId + '.') : '';
+                  const sIdFormatted = sId ? (/[.\)।:]\s*$/.test(sId) ? sId : sId + '.') : '';
                   html += `
                   <p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;tab-stops:11.7pt 24.75pt 351pt;margin-bottom:1.5pt;line-height:normal;text-align:justify;">
                     <b>${cvt(sIdFormatted)}&nbsp;</b>${formatMath(sub.text)}${subFormattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${subFormattedMarks}</b>` : ''}

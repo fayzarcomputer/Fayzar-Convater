@@ -84,6 +84,32 @@
       const totalLetterCount = (text.match(/[a-zA-Z\u0980-\u09FF]/g) || []).length;
       const isPureEnglish = (totalLetterCount > 20 && (bnCharCount / totalLetterCount) < 0.05);
 
+      // User Mandate: Count genuine MCQ questions vs total main questions
+      let totalQuestions = 0;
+      let mcqQuestions = 0;
+      const rawLines = text.split(/\r?\n/);
+      let currentHasMcq = false;
+
+      for (let l of rawLines) {
+        const trimmed = l.trim();
+        if (/^[০-৯0-9]+[।\.\)]\s/.test(trimmed)) {
+          totalQuestions++;
+          currentHasMcq = false;
+        }
+        if (/(?:(?:\t|\s{2,})[কa][\.\)]|\([কa]\)).*?(?:(?:\t|\s{2,})[খb][\.\)]|\([খb]\))/i.test(trimmed) ||
+            /^(?:[কa][\.\)]|\([কa]\))\s+[^\n]+?(?:(?:\t|\s{2,})[খb][\.\)]|\([খb]\))/i.test(trimmed)) {
+          if (!currentHasMcq) {
+            mcqQuestions++;
+            currentHasMcq = true;
+          }
+        }
+      }
+
+      // Strict MCQ Gate: A document is ONLY an MCQ paper if:
+      // 1. It has 18 to 30 MCQs (e.g. standard 20-30 MCQ exam), OR
+      // 2. 100% of all questions are MCQs (all questions have options).
+      const isStrictMcqPaper = (mcqQuestions >= 18) || (totalQuestions >= 3 && mcqQuestions === totalQuestions) || (totalQuestions > 10 && mcqQuestions >= totalQuestions * 0.85);
+
       // 0. EXPLICIT VISION AI LAYOUT TAGS (Highest Priority - Direct Vision AI Classification)
       const layoutTagMatch = text.match(/\[LAYOUT:\s*([A-Za-z0-9_\-]+)\]/i);
       if (layoutTagMatch) {
@@ -106,8 +132,8 @@
         }
         if (tag === 'CQ_BOOKLET' || tag === 'BENGALI_CQ_PAPER') {
           // If document also contains MCQ, it is COMBINED!
-          const hasMcqInText = /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(text);
-          if (hasMcqInText) {
+          const hasCombinedMcq = /---SECTION_BREAK:MCQ---/i.test(text) || (isStrictMcqPaper && /(?:ক\-বিভাগ|খ\-বিভাগ|সৃজনশীল)/i.test(text));
+          if (hasCombinedMcq) {
             return {
               archetypeId: 'bengali_combined_exam_paper',
               name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
@@ -138,15 +164,45 @@
           };
         }
         if (tag === 'MCQ_2COL' || tag === 'BENGALI_MCQ_PAPER') {
+          if (isStrictMcqPaper) {
+            return {
+              archetypeId: 'bengali_mcq_paper',
+              name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
+              reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: MCQ_2COL] ও ২০-৩০টি বা শতভাগ বহুনির্বাচনী প্রশ্ন সত্য প্রমাণিত',
+              isPureEnglish: isPureEnglish,
+              fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+              numberingDelimiter: '।',
+              hangingIndentDxa: 360,
+              subIndentDxa: 0,
+              columns: 2,
+              tableStyle: 'plain_compact',
+              stripAuditNotes: true
+            };
+          }
           return {
-            archetypeId: 'bengali_mcq_paper',
-            name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
-            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: MCQ_2COL]',
+            archetypeId: 'bengali_standard_question_paper',
+            name: 'বাংলা সাধারণ/প্রাথমিক প্রশ্নপত্র (২-কলাম)',
+            reason: 'নথিতে ২০-৩০টি বহুনির্বাচনী প্রশ্ন না থাকায় সাধারণ ২-কলাম প্রশ্নপত্র প্রোফাইল কার্যকর',
             isPureEnglish: isPureEnglish,
             fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
             numberingDelimiter: '।',
             hangingIndentDxa: 360,
-            subIndentDxa: 0,
+            subIndentDxa: 720,
+            columns: 2,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'QUESTION_2COL' || tag === 'STANDARD_EXAM' || tag === 'SHORT_QUESTION') {
+          return {
+            archetypeId: 'bengali_standard_question_paper',
+            name: 'বাংলা সাধারণ/প্রাথমিক প্রশ্নপত্র (২-কলাম)',
+            reason: `Gemini Vision লেআউট ট্যাগ [LAYOUT: ${tag}]`,
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '।',
+            hangingIndentDxa: 360,
+            subIndentDxa: 720,
             columns: 2,
             tableStyle: 'plain_compact',
             stripAuditNotes: true
@@ -271,9 +327,9 @@
       const hasExplicitCqKeyword = /(?:ক-বিভাগ|খ-বিভাগ|গ-বিভাগ|ঘ-বিভাগ|গদ্য|কবিতা|সৃজনশীল|উদ্দীপক|দৃশ্যকল্প)/i.test(text) || (/---SECTION_BREAK/i.test(text));
       const hasCqSubQuestionsWithMarks = /(?:^|\n)\s*(?:\([কa]\)|[কa][\.।])[^\n]+\[[১1]\][\s\S]*?(?:^|\n)\s*(?:\([খb]\)|[খb][\.।])[^\n]+\[[২2]\]/m.test(text);
       const hasCqMarkers = hasExplicitCqKeyword || hasCqSubQuestionsWithMarks;
-      const hasMcqMarkers = /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|সঠিক উত্তর)/i.test(text) || /(?:\(ক\)[^\n]+\(খ\)|ক\.[^\n]+খ\.)/m.test(text);
+      const hasCombinedMcq = /---SECTION_BREAK:MCQ---/i.test(text) || (isStrictMcqPaper && /(?:ক\-বিভাগ|খ\-বিভাগ|সৃজনশীল)/i.test(text));
 
-      if (hasCqMarkers && hasMcqMarkers) {
+      if (hasCqMarkers && hasCombinedMcq) {
         return {
           archetypeId: 'bengali_combined_exam_paper',
           name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
@@ -290,12 +346,12 @@
         };
       }
 
-      // ARCHETYPE 5: Multiple Choice Questions (MCQ)
-      if (/(?:\(ক\)[^\n]+\(খ\)|ক\.[^\n]+খ\.)/m.test(text) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|সঠিক উত্তর|১টি করে উত্তর)/i.test(text)) {
+      // ARCHETYPE 5: Multiple Choice Questions (MCQ) - STRICT GATE: ONLY when 20-30 MCQs or 100% of questions are MCQs!
+      if (isStrictMcqPaper) {
         return {
           archetypeId: 'bengali_mcq_paper',
           name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
-          reason: 'ক., খ., গ., ঘ. সমান্তরাল বিকল্প সংবলিত বহুনির্বাচনী প্রশ্ন',
+          reason: '২০-৩০টি বা শতভাগ বহুনির্বাচনী প্রশ্ন সংবলিত প্রশ্নপত্র',
           isPureEnglish: false,
           fontFamily: 'SutonnyMJ',
           numberingDelimiter: '।',
@@ -307,7 +363,7 @@
         };
       }
 
-      // ARCHETYPE 5: Mathematics & Science Question Paper
+      // ARCHETYPE 5.1: Mathematics & Science Question Paper
       if (/\$|\\frac|\\sqrt|\\[a-zA-Z]+|\^2|\+.*=/.test(text) || /(?:গণিত|পদার্থবিজ্ঞান|রসায়ন|সমীকরণ|বীজগণিত|জ্যামিতি)/i.test(text)) {
         return {
           archetypeId: 'math_science_paper',
@@ -324,8 +380,8 @@
         };
       }
 
-      // ARCHETYPE 6: Bengali Creative Question Paper (CQ)
-      if (/(?:উদ্দীপক|ক\.\s*[^\n]+|খ\.\s*[^\n]+|দৃশ্যকল্প|সৃজনশীল)/i.test(text) || /(?:^[১-৯]+[।]\s*)/m.test(text)) {
+      // ARCHETYPE 6: Bengali Creative Question Paper (CQ) - Specifically for Class 6-12 with Stimulus and 4-tier sub-questions
+      if (/(?:উদ্দীপক|দৃশ্যকল্প|সৃজনশীল)/i.test(text) || (/(?:ক\.\s*[^\n]+\s*খ\.\s*[^\n]+\s*গ\.)/.test(text) && /\[[১-৪\d]\]/.test(text))) {
         return {
           archetypeId: 'bengali_cq_paper',
           name: 'বাংলা সৃজনশীল প্রশ্নপত্র (CQ)',
@@ -341,16 +397,33 @@
         };
       }
 
+      // ARCHETYPE 7: Standard Bengali Exam Paper / Primary School Exam / Short Questions (১ম থেকে ৫ম শ্রেণি ও সাধারণ ছোট প্রশ্ন)
+      if (/(?:শ্রেণি|বিষয়|সময়|পূর্ণমান|পরীক্ষা|সংক্ষিপ্ত\s*প্রশ্ন|শূন্যস্থান|উত্তর\s*দাও)/i.test(text) || /^[০-৯0-9]+[।\.\)]\s/m.test(text)) {
+        return {
+          archetypeId: 'bengali_standard_question_paper',
+          name: 'বাংলা সাধারণ/প্রাথমিক প্রশ্নপত্র (২-কলাম)',
+          reason: '১ম-৫ম শ্রেণি বা সাধারণ ছোট প্রশ্ন সংবলিত ২-কলাম প্রশ্নপত্র',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: isPureEnglish ? '.' : '।',
+          hangingIndentDxa: 360,
+          subIndentDxa: 720,
+          columns: 2,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+
       // Fallback Default Question Paper
       return {
-        archetypeId: isPureEnglish ? 'english_question_paper' : 'bengali_cq_paper',
-        name: isPureEnglish ? 'ইংরেজি প্রশ্নপত্র' : 'বাংলা সাধারণ প্রশ্নপত্র',
+        archetypeId: isPureEnglish ? 'english_question_paper' : 'bengali_standard_question_paper',
+        name: isPureEnglish ? 'ইংরেজি প্রশ্নপত্র' : 'বাংলা সাধারণ প্রশ্নপত্র (২-কলাম)',
         reason: 'স্বয়ংক্রিয় ডিটেকশন',
         isPureEnglish: isPureEnglish,
         fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
         numberingDelimiter: isPureEnglish ? '.' : '।',
-        hangingIndentDxa: 432,
-        subIndentDxa: 864,
+        hangingIndentDxa: 360,
+        subIndentDxa: 720,
         columns: 2,
         tableStyle: 'plain_compact',
         stripAuditNotes: true

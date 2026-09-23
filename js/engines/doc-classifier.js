@@ -27,15 +27,20 @@
       if (!text || typeof text !== 'string') return { type: this.DOC_TYPES.GENERAL, confidence: 0 };
       const t = text.trim();
 
+      // Count questions and MCQ clusters
+      const totalQuestionMatches = t.match(/^[০-৯0-9]+[।\.\)]\s/gm) || [];
+      const totalQCount = totalQuestionMatches.length;
+      const mcqClusterMatches = t.match(/[ক-ঘ][\)\.]\s+[^\n]+[ক-ঘ][\)\.]/g) || [];
+      const mcqCount = mcqClusterMatches.length;
+      const isStrictMcq = (mcqCount >= 18) || (totalQCount >= 3 && mcqCount >= totalQCount * 0.85);
+
       // Combined CQ + MCQ Detection (Highest Priority for Exam Papers)
       const hasCqMarkers = /(?:সৃজনশীল|উদ্দীপক|দৃশ্যকল্প|ক\-বিভাগ|খ\-বিভাগ)/i.test(t) ||
         (/(?:ক\.\s*[^\n]+\s*খ\.\s*[^\n]+\s*গ\.)/.test(t) && /\[[১-৪\d]\]/.test(t));
-      const hasMcqMarkers = /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ|সঠিক উত্তর)/i.test(t) ||
-        (/[ক-ঘ][\)\.]\s+[^\n]+[ক-ঘ][\)\.]/.test(t) && /[\u09E6-\u09EF\d]+[।.)]\s/.test(t));
       const hasExplicitSectionBreak = /---SECTION_BREAK/i.test(t) || /\[LAYOUT:\s*COMBINED/i.test(t);
 
       let combinedScore = 0;
-      if (hasExplicitSectionBreak || (hasCqMarkers && hasMcqMarkers)) {
+      if (hasExplicitSectionBreak || (hasCqMarkers && isStrictMcq)) {
         combinedScore = 50;
       }
 
@@ -50,26 +55,19 @@
       let padScore = 0;
       let routineScore = 0;
 
-      // If document contains Creative Questions (সৃজনশীল), it is a full CQ paper (which may include MCQ sections)
+      // STRICT MCQ GATE: Only classify as EXAM_MCQ if document contains 20-30 MCQs or all questions are MCQs!
       if (/সৃজনশীল/i.test(t)) {
         cqScore += 30;
-      } else if (/বহুনির্বাচনি|বহুনির্বাচনী|নৈর্ব্যক্তিক|নৈর্ব¨|নৈর্ব|MCQ|সঠিক উত্তর/i.test(t)) {
-        mcqScore += 25; // Pure MCQ paper
+      } else if (isStrictMcq) {
+        mcqScore += 35; // Pure MCQ paper
+      } else if (/শ্রেণি|বিষয়|সময়|পূর্ণমান|পরীক্ষা/.test(t) || totalQCount > 0) {
+        cqScore += 25; // Standard 2-column question paper (Class 1-5 / short questions)
       }
 
       if (/ক\.\s*[^\n]+\s*খ\.\s*[^\n]+\s*গ\./.test(t) && !/সৃজনশীল/.test(t)) {
         cqScore += 8;
       }
-      if (/শ্রেণি|বিষয়|সময়|পূর্ণমান|পরীক্ষা/.test(t)) { cqScore += 2; mcqScore += 2; }
       if (/[\u09E7-\u09EF\d]+\s*[+\-xX×=]\s*[\u09E7-\u09EF\d]+/.test(t)) cqScore += 3;
-
-      // Count MCQ option clusters if not already determined by সৃজনশীল
-      if (!/সৃজনশীল/.test(t)) {
-        const mcqClusterMatches = t.match(/[ক-ঘ][\)\.]\s+[^\n]+[ক-ঘ][\)\.]/g);
-        if (mcqClusterMatches && mcqClusterMatches.length >= 3) {
-          mcqScore += Math.min(mcqClusterMatches.length * 2, 20);
-        }
-      }
 
       // Stamp patterns
       if (/৩০০|তিনশত|স্ট্যাম্প|অঙ্গীকার\s*নামা|বায়নানামা|চুক্তিপত্র|তফসিল|মৌজা|খতিয়ান|দাগ\s*নং/.test(t)) stampScore += 5;
