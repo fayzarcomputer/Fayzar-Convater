@@ -515,16 +515,33 @@
         }
 
         // Section Break for MCQ or multi-layout (e.g., ---SECTION_BREAK:MCQ--- or ---SECTION_BREAK--- or natural Bengali MCQ header)
-        const isExplicitSectionBreak = /^---(?:SECTION_BREAK(?::[A-Za-z0-9_\-]+)?|MCQ_SECTION)---$/i.test(line);
+        const isExplicitSectionBreak = /^---(?:SECTION_BREAK(?::[A-Za-z0-9_\-]+)?|MCQ_SECTION)---$/i.test(line) ||
+          /^\[(?:SECTION_BREAK(?::[A-Za-z0-9_\-]+)?|MCQ_SECTION)\]$/i.test(line);
         const isMcqSectionStartLine = !isInMcqSection && /^(?:#{1,6}\s*)?(?:(?:ক|খ|গ|ঘ|ঙ|চ)\s*[-–—:]\s*)?(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)(?:\s*(?:প্রশ্ন|অভীক্ষা|অংশ|বিভাগ))?/i.test(line);
 
-        if (isExplicitSectionBreak || isMcqSectionStartLine) {
+        // Natural Institutional Header detection preceding MCQ in combined papers
+        let isInstitutionalMcqHeader = false;
+        if (!isInMcqSection && i > 3 && /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|ইনস্টিটিউট|School|College)/i.test(line)) {
+          for (let look = i; look < Math.min(lines.length, i + 9); look++) {
+            if (/(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(lines[look])) {
+              isInstitutionalMcqHeader = true;
+              break;
+            }
+          }
+        }
+
+        if (isExplicitSectionBreak || isMcqSectionStartLine || isInstitutionalMcqHeader) {
           isInMcqSection = true;
           const mcqHeader = {};
           if (isMcqSectionStartLine) {
             mcqHeader.title = line.replace(/^#{1,6}\s+/, '').trim();
+            i++;
+          } else if (isInstitutionalMcqHeader) {
+            mcqHeader.institute = line.replace(/^#{1,6}\s+/, '').trim();
+            i++;
+          } else if (isExplicitSectionBreak) {
+            i++;
           }
-          i++;
           while (i < lines.length) {
             const hLine = lines[i].trim();
             if (!hLine) { i++; continue; }
@@ -690,11 +707,11 @@
             let inlineSubMarks = qMarks;
 
             const sMarksMatch = inlineSubText.match(/\s*\[\s*([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+?)\s*\]\s*$/)
-              || inlineSubText.match(/(?:\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
+              || inlineSubText.match(/(?:(?:\?|।|:)\s*|\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
             if (sMarksMatch) {
               inlineSubMarks = sMarksMatch[1].trim();
               inlineSubText = inlineSubText.replace(/\s*\[\s*[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\s*\]\s*$/, '')
-                .replace(/(?:\t|\s{2,})[০-৯0-9]{1,2}\s*$/, '').trim();
+                .replace(/(?:(?:\?|।|:)\s*|\t|\s{2,})[০-৯0-9]{1,2}\s*$/, (m) => m.startsWith('?') ? '?' : (m.startsWith('।') ? '।' : (m.startsWith(':') ? ':' : ''))).trim();
             }
 
             questionBlock.text = '';
@@ -718,7 +735,7 @@
             }
 
             // If a new main question, section heading, or section break begins, stop processing this question immediately!
-            if (/^[০-৯0-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine)) {
+            if (/^[০-৯0-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine) || /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|ইনস্টিটিউট|School|College)/i.test(subLine)) {
               break;
             }
 
@@ -730,11 +747,11 @@
               let subMarks = '';
 
               const subMarksMatch = subText.match(/\s*\[\s*([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+?)\s*\]\s*$/)
-                || subText.match(/(?:\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
+                || subText.match(/(?:(?:\?|।|:)\s*|\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
               if (subMarksMatch) {
                 subMarks = subMarksMatch[1].trim();
                 subText = subText.replace(/\s*\[\s*[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\s*\]\s*$/, '')
-                  .replace(/(?:\t|\s{2,})[০-৯0-9]{1,2}\s*$/, '').trim();
+                  .replace(/(?:(?:\?|।|:)\s*|\t|\s{2,})[০-৯0-9]{1,2}\s*$/, (m) => m.startsWith('?') ? '?' : (m.startsWith('।') ? '।' : (m.startsWith(':') ? ':' : ''))).trim();
               }
 
               const isMcqOptionsRow = /(?:[খ-ঘ][\.\)]|\t)/.test(subText)
@@ -777,7 +794,7 @@
 
             // Multi-line stimulus / poem absorption:
             // If the line doesn't match any sub-question pattern but is part of the question block
-            if (/^[০-৯0-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^(\-{3,}|\={3,}|\*{3,})$/.test(subLine) || subLine.startsWith('|') || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine)) {
+            if (/^[০-৯0-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^(\-{3,}|\={3,}|\*{3,})$/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || subLine.startsWith('|') || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine) || /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|ইনস্টিটিউট|School|College)/i.test(subLine)) {
               break;
             }
             const cleanStimLine = subLine.replace(/^>\s?/, '');

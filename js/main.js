@@ -2294,6 +2294,9 @@ function initUnifiedConverterEngine() {
   const wizardDlDocxBtn = document.getElementById('wizardDlDocxBtn');
   const wizardDlDocBtn = document.getElementById('wizardDlDocBtn');
   const wizardDlUnicodeDocxBtn = document.getElementById('wizardDlUnicodeDocxBtn');
+  const wizardStudioPreviewBtn = document.getElementById('wizardStudioPreviewBtn');
+  const wizardOpenStudioInlineBtn = document.getElementById('wizardOpenStudioInlineBtn');
+  const wizardDlMdBtn = document.getElementById('wizardDlMdBtn');
   const wizardDlXlsxBtn = document.getElementById('wizardDlXlsxBtn');
   const wizardDlPptxBtn = document.getElementById('wizardDlPptxBtn');
   const wizardConvertAnotherBtn = document.getElementById('wizardConvertAnotherBtn');
@@ -2888,6 +2891,25 @@ function initUnifiedConverterEngine() {
       if (wizardDlUnicodeDocxBtn) {
         wizardDlUnicodeDocxBtn.classList.remove('hidden');
         wizardDlUnicodeDocxBtn.onclick = () => window.FayzarAiOcrEngine.downloadWordDocument('unicode_docx');
+      }
+      if (wizardStudioPreviewBtn) {
+        wizardStudioPreviewBtn.classList.remove('hidden');
+        wizardStudioPreviewBtn.onclick = () => {
+          if (window.FayzarAiOcrEngine && typeof window.FayzarAiOcrEngine.openStudioPreviewEditor === 'function') {
+            window.FayzarAiOcrEngine.openStudioPreviewEditor();
+          }
+        };
+      }
+      if (wizardOpenStudioInlineBtn) {
+        wizardOpenStudioInlineBtn.onclick = () => {
+          if (window.FayzarAiOcrEngine && typeof window.FayzarAiOcrEngine.openStudioPreviewEditor === 'function') {
+            window.FayzarAiOcrEngine.openStudioPreviewEditor();
+          }
+        };
+      }
+      if (wizardDlMdBtn) {
+        wizardDlMdBtn.classList.remove('hidden');
+        wizardDlMdBtn.onclick = () => window.FayzarAiOcrEngine.downloadWordDocument('md');
       }
       if (wizardCopyTextBtn) {
         wizardCopyTextBtn.classList.remove('hidden');

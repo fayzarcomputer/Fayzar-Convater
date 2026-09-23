@@ -145,6 +145,7 @@
 
   <!-- Custom Modern Design System -->
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/studio.css">
 
   <!-- PDF.js CDN for Client-Side PDF Multi-Page Rendering -->
   <script src="js/vendor/pdf.min.js"></script>
@@ -165,6 +166,38 @@
       }
     })();
   </script>
+
+  <style>
+    @media print {
+      body {
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      nav, footer, .floating-cta-stack, .no-print,
+      #integratedPreviewSection > :first-child,
+      #previewLiveEditActiveBanner,
+      header,
+      #wizardResultCard > :first-child,
+      #wizardResultCard > .p-6 > :not(#integratedPreviewSection) {
+        display: none !important;
+      }
+      #printSheetCanvasWrapper {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      .paper-sheet {
+        box-shadow: none !important;
+        margin: 0 auto !important;
+        page-break-after: always !important;
+      }
+    }
+  </style>
 </head>
 
 <body class="bg-slate-100 dark:bg-[#070c18] text-slate-800 dark:text-slate-100 font-sans antialiased pb-20 lg:pb-0 transition-colors duration-300">
@@ -219,31 +252,21 @@
           </div>
         </div>
 
-        <!-- Bottom Tier: Main Navigation Links (Always on Top, Auto-Adjusts font size and gap when resized) -->
-        <div id="desktop-nav-links" class="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2.5 xl:gap-3 py-0.5 sm:py-1 text-[11.5px] sm:text-[12.5px] md:text-[13.5px] lg:text-[14.5px] xl:text-[15.5px] font-medium text-[#121212] dark:text-slate-100 whitespace-nowrap">
-          <!-- 1. হোম -->
-          <a href="index.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold" data-i18n="nav_home">হোম</a>
+        <!-- Bottom Tier: Main Navigation Links -->
+        <div id="desktop-nav-links" class="flex items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-3 py-0.5 sm:py-1 text-[12px] sm:text-[13px] md:text-[14px] lg:text-[15px] font-medium text-[#121212] dark:text-slate-100 whitespace-nowrap">
+          <!-- 1. হোম / কনভার্টার -->
+          <a href="index.html" class="py-0.5 px-2 rounded-md text-[#075e24] bg-emerald-50 dark:bg-slate-800 dark:text-emerald-400 transition font-extrabold shadow-2xs">কনভার্টার</a>
 
-          <!-- 2. সার্ভিস -->
-          <a href="services.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold" data-i18n="nav_services_short">সার্ভিস</a>
+<!-- 2. অফিস ডক কনভার্টার -->
+          <a href="doc-converter.html" class="py-0.5 px-2 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold">ডকুমেন্ট কনভার্টার</a>
 
-          <!-- 3. জব -->
-          <a href="portal.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold" data-i18n="nav_jobs_short">জব</a>
+          <!-- 3. DOCX to DOC -->
+          <a href="docx-to-doc.html" class="py-0.5 px-2 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold">Word 2003 DOC</a>
 
-          <!-- 4. কনভার্টার (Active State on converter.html) -->
-          <a href="converter.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md text-[#075e24] bg-emerald-50 dark:bg-slate-800 dark:text-emerald-400 transition font-extrabold shadow-2xs flex items-center gap-1" data-i18n="nav_converter_short">
-            <span>কনভার্টার</span>
-            <span class="text-[8px] sm:text-[9px] uppercase font-black px-1 sm:px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Live</span>
+          <!-- 4. ওয়ার্ড পাবলিশিং স্টুডিও -->
+          <a href="studio.html" class="py-0.5 px-2 rounded-md hover:text-indigo-600 hover:bg-indigo-50/60 dark:hover:bg-slate-800 transition font-black text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5 shadow-2xs">
+            <i class="fa-solid fa-file-word"></i> <span>ওয়ার্ড স্টুডিও</span>
           </a>
-
-          <!-- 5. টুলস -->
-          <a href="tools.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold" data-i18n="nav_tools_short">টুলস</a>
-
-          <!-- 6. রেজাল্ট -->
-          <a href="results.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold" data-i18n="nav_results_short">রেজাল্ট</a>
-
-          <!-- 7. কন্টাক্ট -->
-          <a href="contact.html" class="py-0.5 px-1.5 sm:px-2 lg:px-2.5 rounded-md hover:text-[#075e24] hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition font-bold" data-i18n="nav_contact_short">কন্টাক্ট</a>
         </div>
 
       </div>
@@ -302,6 +325,15 @@
       </div>
     </div>
 
+    <!-- Smart Auto-Layout System Active Badge -->
+    <div class="mb-3 px-4 py-2.5 rounded-2xl bg-emerald-50/90 dark:bg-[#15233c] border border-emerald-300/70 dark:border-emerald-600/50 flex items-center justify-between text-xs transition shadow-xs">
+      <div class="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
+        <i class="fa-solid fa-wand-magic-sparkles text-amber-500 text-sm"></i>
+        <span>স্মার্ট অটো-লেআউট সক্রিয়: ফাইলের ধরন অনুযায়ী সরাসরি ২-কলাম প্রশ্নপত্র, হেডার ও টেবিলসহ Word 2003 ও Word (.docx) ফাইল প্রস্তুত হবে।</span>
+      </div>
+      <span class="px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 text-[10px] font-black uppercase tracking-wider">Auto Layout</span>
+    </div>
+
     <!-- Main Converter App Box -->
     <div id="panel-text" class="tool-content-panel bg-white dark:bg-[#131d31] rounded-3xl p-3.5 sm:p-6 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-4">
       
@@ -321,11 +353,17 @@
           </span>
         </div>
 
-        <!-- Controls: Unified Mode Badge / Toggle & Settings -->
+        <!-- Controls: AI Badge & Settings -->
         <div class="flex items-center gap-2">
-          <button type="button" id="ai-ocr-mode-badge" class="px-3 py-1.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 inline-flex items-center gap-1.5 shadow-2xs cursor-pointer hover:shadow-md transition-all duration-300" title="AI মডেল স্ট্যাটাস">
-            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> এপিআই একটিভ আছে
-          </button>
+          <!-- Pro Model Quick Toggle Button -->
+          <div id="proModelToggleWrapper" class="hidden items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-100/80 dark:bg-purple-950/70 border border-purple-300 dark:border-purple-700 text-[11px] shadow-2xs">
+            <span class="font-bold text-purple-900 dark:text-purple-200">⚡ প্রো মডেল:</span>
+            <button type="button" id="proModelToggleBtn" class="px-2 py-0.5 rounded-lg font-black text-[10px] transition cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs" title="প্রো মডেল চালু বা বন্ধ করতে ক্লিক করুন">চালু (ON)</button>
+          </div>
+
+          <span id="ai-ocr-mode-badge" class="px-3 py-1.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 inline-flex items-center gap-1.5 shadow-2xs cursor-pointer hover:shadow-md transition-all duration-300" title="Google Gemini Live Cloud API সক্রিয়">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> এপিআই কি সক্রিয় আছে
+          </span>
           
           <button type="button" id="ai-ocr-open-settings-btn" aria-label="Gemini AI সেটিংস ও API Key" class="p-2 sm:p-2.5 rounded-xl bg-slate-100 dark:bg-[#1a263d] hover:bg-slate-200 dark:hover:bg-[#23324f] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition shadow-2xs cursor-pointer" title="Gemini API Key ও AI সেটিংস">
             <i class="fa-solid fa-gear text-sm" aria-hidden="true"></i>
@@ -773,8 +811,8 @@
               </div>
             </div>
 
-            <!-- 1-Click Multi-Format Download Action Grid (3 Word Formats + Copy Text) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <!-- 1-Click Multi-Format Download & Studio Action Grid (Word, Studio Editor, LaTeX & Copy) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               
               <!-- 1. Download Word 2003 .DOC (SutonnyMJ) -->
               <button type="button" id="wizardDlDocBtn" class="py-4 px-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 text-white font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition cursor-pointer transform hover:-translate-y-0.5 text-center">
@@ -803,7 +841,25 @@
                 <span class="text-[10px] font-normal opacity-90">কালপুরুষ / নিকোশ ফন্ট</span>
               </button>
 
-              <!-- 4. Copy Text & Preview -->
+              <!-- 4. Studio Preview & Live Editor Option -->
+              <button type="button" id="wizardStudioPreviewBtn" class="py-4 px-3 rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-700 hover:from-violet-500 hover:to-indigo-600 text-white font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition cursor-pointer transform hover:-translate-y-0.5 text-center">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-pen-to-square text-lg text-purple-200" aria-hidden="true"></i>
+                  <span>স্টুডিও প্রিভিউ ও এডিটর</span>
+                </div>
+                <span class="text-[10px] font-normal opacity-90">মাস্টার ফাইল এডিট ও আউটপুট</span>
+              </button>
+
+              <!-- 5. Download Markdown .MD (Raw LaTeX & Text) -->
+              <button type="button" id="wizardDlMdBtn" class="py-4 px-3 rounded-2xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-600 text-white font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition cursor-pointer transform hover:-translate-y-0.5 text-center">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-code text-lg text-amber-100" aria-hidden="true"></i>
+                  <span>মার্কডাউন (.MD)</span>
+                </div>
+                <span class="text-[10px] font-normal opacity-90">LaTeX সমীকরণ ও টেক্সট ফাইল</span>
+              </button>
+
+              <!-- 6. Copy Text & Preview -->
               <button type="button" id="wizardCopyTextBtn" class="py-4 px-3 rounded-2xl bg-white dark:bg-[#1a263d] hover:bg-slate-100 dark:hover:bg-[#23324f] text-slate-800 dark:text-slate-100 border-2 border-slate-200 dark:border-slate-700 font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1 transition cursor-pointer shadow-xs text-center">
                 <div class="flex items-center gap-2">
                   <i class="fa-solid fa-copy text-indigo-500 text-lg" aria-hidden="true"></i>
@@ -824,18 +880,95 @@
               </button>
             </div>
 
-            <!-- Collapsible Text Preview -->
-            <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-2">
-              <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                <button type="button" id="wizardPreviewToggleBtn" class="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-eye" aria-hidden="true"></i> <span id="wizardPreviewToggleText">টেক্সট প্রিভিউ দেখুন</span>
-                </button>
-                <span id="wizardResultDetails" class="text-[11px] text-slate-600 dark:text-slate-300 font-semibold"></span>
+            <!-- =========================================================================
+                 ইন্টিগ্রেটেড লাইভ প্রিন্ট লেআউট প্রিভিউ ও স্টুডিও হাব (Interactive Studio Preview)
+                 ========================================================================= -->
+            <div id="integratedPreviewSection" class="pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-3">
+              
+              <!-- Preview Header & Controls Bar -->
+              <div class="p-3 rounded-2xl bg-slate-100 dark:bg-[#1a263d] border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                
+                <!-- Left: Document Type Badge & View Mode Tabs -->
+                <div class="flex items-center flex-wrap gap-2">
+                  <span id="previewDocTypeBadge" class="px-2.5 py-1 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-graduation-cap"></i> <span id="previewDocTypeBadgeText">বোর্ড স্ট্যান্ডার্ড প্রশ্নপত্র</span>
+                  </span>
+
+                  <!-- Mode Tabs (Print Sheet Canvas vs Source Text Editor) -->
+                  <div class="flex items-center rounded-xl bg-white dark:bg-[#131d31] p-0.5 border border-slate-300 dark:border-slate-600 text-xs font-bold">
+                    <button type="button" id="tabBtnPrintSheet" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-file-invoice"></i> <span>প্রিন্ট শিট ভিউ</span>
+                    </button>
+                    <button type="button" id="tabBtnSourceText" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 transition flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-code"></i> <span>সোর্স টেক্সট</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Right: Layout Switcher, Font Toggle, Zoom & Fullscreen Studio -->
+                <div class="flex items-center flex-wrap gap-2 text-xs font-bold">
+                  
+                  <!-- Layout Mode Selector -->
+                  <div class="flex items-center gap-1 bg-white dark:bg-[#131d31] px-2 py-1 rounded-xl border border-slate-300 dark:border-slate-600">
+                    <i class="fa-solid fa-table-columns text-indigo-500"></i>
+                    <select id="previewLayoutModeSelect" class="bg-transparent text-slate-800 dark:text-slate-100 outline-none cursor-pointer text-xs font-bold">
+                      <option value="AUTO" selected>অটো লেআউট (বোর্ড ২-কলাম)</option>
+                      <option value="BOOKLET">বুকলেট ফোল্ড মোড (শীট ১ ও ২)</option>
+                      <option value="SINGLE">১-কলাম স্ট্যান্ডার্ড</option>
+                    </select>
+                  </div>
+
+                  <!-- Font Mode Toggle -->
+                  <div class="flex items-center rounded-xl bg-white dark:bg-[#131d31] border border-slate-300 dark:border-slate-600 overflow-hidden">
+                    <button type="button" id="previewFontToggleBijoy" class="px-2.5 py-1 bg-emerald-600 text-white transition text-xs font-bold" title="সুতন্নিএমজে বিজয় ফন্টে দেখুন">বিজয় (Sutonny)</button>
+                    <button type="button" id="previewFontToggleUnicode" class="px-2.5 py-1 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-xs font-bold" title="কালপুরুষ ইউনিকোডে দেখুন">ইউনিকোড</button>
+                  </div>
+
+                  <!-- Live Edit Toggle Button -->
+                  <button type="button" id="previewLiveEditToggleBtn" class="px-2.5 py-1 rounded-xl bg-white dark:bg-[#131d31] hover:bg-amber-50 dark:hover:bg-amber-950 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer" title="সরাসরি শিটে ক্লিক করে এডিট করুন">
+                    <i class="fa-solid fa-pen-to-square text-amber-500"></i>
+                    <span id="previewLiveEditToggleText">লাইভ এডিট</span>
+                  </button>
+
+                  <!-- Direct Vector Print / PDF Button -->
+                  <button type="button" id="previewDirectPrintBtn" class="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer" title="ব্রাউজার থেকে সরাসরি ভেক্টর প্রিন্ট বা PDF সেভ করুন">
+                    <i class="fa-solid fa-print"></i> <span>প্রিন্ট / PDF</span>
+                  </button>
+
+                  <!-- Launch in Full Publishing Studio -->
+                  <button type="button" id="previewLaunchStudioBtn" class="px-3 py-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white transition flex items-center gap-1.5 shadow-sm cursor-pointer" title="মাইক্রোসফট ওয়ার্ড পাবলিশিং স্টুডিওতে পূর্ণস্ক্রিনে খুলুন">
+                    <i class="fa-solid fa-up-right-from-square"></i> <span>ওয়ার্ড স্টুডিও</span>
+                  </button>
+
+                </div>
+
               </div>
 
-              <div id="wizardPreviewBox" class="hidden flex-col gap-2 pt-1 animate-fade-in">
-                <textarea id="wizardPreviewContent" rows="6" readonly aria-label="রূপান্তরিত টেক্সট প্রিভিউ" class="w-full p-3.5 rounded-2xl bg-white dark:bg-[#131d31] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-sans text-xs sm:text-sm leading-relaxed outline-none"></textarea>
+              <!-- Main Canvas Area: Authentic Word Page Sheets -->
+              <div id="printSheetCanvasWrapper" class="relative w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-200/90 dark:bg-[#0c1322] p-4 sm:p-6 overflow-auto max-h-[850px] shadow-inner flex flex-col items-center">
+                
+                <!-- Notice Banner when Live Edit is ON -->
+                <div id="previewLiveEditActiveBanner" class="hidden mb-3 w-full max-w-4xl py-1.5 px-3 rounded-xl bg-amber-500 text-slate-900 font-bold text-xs flex items-center justify-between shadow-md animate-fade-in">
+                  <span class="flex items-center gap-2"><i class="fa-solid fa-circle-exclamation"></i> <strong>লাইভ এডিট সক্রিয়:</strong> আপনি সরাসরি প্রশ্নপত্রের যেকোনো লেখার ওপর ক্লিক করে পরিবর্তন করতে পারবেন।</span>
+                  <span class="text-[11px] font-semibold opacity-90">স্বয়ংক্রিয় সংরক্ষণ হচ্ছে</span>
+                </div>
+
+                <!-- Live Sheets Container (Injected by QuestionEngine / ExportDualEngine) -->
+                <div id="livePrintSheetContainer" class="w-full flex flex-col items-center gap-6">
+                  <!-- Rendered Paper Sheets (.paper-sheet) will be injected here -->
+                </div>
+
               </div>
+
+              <!-- Collapsible Source Text Area (Active when Tab 2 is clicked) -->
+              <div id="sourceTextEditorWrapper" class="hidden flex-col gap-2 pt-1 animate-fade-in">
+                <div class="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                  <span>সরাসরি ইউনিকোড টেক্সট (এডিট করলে স্বয়ংক্রিয়ভাবে প্রিন্ট শিট আপডেট হবে):</span>
+                  <span id="sourceCharWordCount" class="text-[11px] text-slate-500"></span>
+                </div>
+                <textarea id="wizardPreviewContent" rows="12" aria-label="রূপান্তরিত টেক্সট প্রিভিউ" class="w-full p-4 rounded-2xl bg-white dark:bg-[#131d31] border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-mono text-xs sm:text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-inner"></textarea>
+              </div>
+
             </div>
 
           </div>
@@ -1700,7 +1833,25 @@
   <script src="js/docx-handler.js"></script>
   <script src="js/xlsx-handler.js"></script>
   <script src="js/pptx-handler.js"></script>
-  <script src="js/fayzar-ocr-config.js"></script>
+  <!-- Fayzar Publishing Studio & Board Standard Layout Suite -->
+  <script src="js/engines/doc-classifier.js"></script>
+  <script src="js/engines/question-engine.js"></script>
+  <script src="js/engines/stamp-engine.js"></script>
+  <script src="js/engines/application-engine.js"></script>
+  <script src="js/engines/certificate-engine.js"></script>
+  <script src="js/engines/omr-engine.js"></script>
+  <script src="js/engines/export-dual-engine.js"></script>
+  <script src="js/engines/converter-studio-bridge.js"></script>
+  <script src="js/templates/academic-templates.js"></script>
+  <script src="js/templates/legal-templates.js"></script>
+  <script src="js/templates/govt-templates.js"></script>
+  <!-- Fayzar Auto-Layout Engine Suite -->
+  <script src="js/layout-engine/layout-templates.js"></script>
+  <script src="js/layout-engine/gemini-prompt-factory.js"></script>
+  <script src="js/layout-engine/md-layout-parser.js"></script>
+  <script src="js/layout-engine/doc-word2003-builder.js"></script>
+  <script src="js/layout-engine/docx-layout-builder.js"></script>
+  <script src="js/markdown-layout-engine.js"></script>
   <script src="js/ai-ocr-engine.js"></script>
   <script src="js/main.js" defer></script>
 
