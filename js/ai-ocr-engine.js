@@ -114,6 +114,16 @@
   const GEMINI_PROMPT = `You are an elite Bengali Professional Document Composer, Question Paper Typist, and LaTeX-to-Word formatting specialist.
 Your goal is to extract and compose a COMPLETE, UNTRUNCATED, BEAUTIFULLY STRUCTURED Bengali document / exam question paper from ALL the provided images/pages in a single continuous document.
 
+MANDATORY STEP 0: FIRST-LINE LAYOUT CLASSIFICATION TAG:
+Inspect images and output ONLY one tag on Line 1, then newline and start text:
+[LAYOUT: COMBINED_EXAM] (for CQ + MCQ)
+[LAYOUT: CQ_BOOKLET] (for CQ only)
+[LAYOUT: MCQ_2COL] (for MCQ only)
+[LAYOUT: MATH_SCIENCE] (for Math/Science)
+[LAYOUT: OFFICIAL_NOTICE] (for Notice/Memo)
+[LAYOUT: GENERAL_DOC] (for standard documents/applications)
+
+
 ABSOLUTE ZERO-HALLUCINATION & SOURCE FIDELITY MANDATE:
 1. STRICT ZERO-HALLUCINATION & ANTI-FABRICATION (যা ছবিতে নেই তা সম্পূর্ণ কল্পনা নিষিদ্ধ):
    - CRITICAL MANDATE: Transcribe ONLY what is physically and visibly present in the source images! NEVER invent, extrapolate, guess, or fabricate any question, sub-question, letter, paragraph, or header!
@@ -144,6 +154,7 @@ ABSOLUTE ZERO-HALLUCINATION & SOURCE FIDELITY MANDATE:
      * বাংলা, গণিত, বিজ্ঞান ইত্যাদি বিষয়ের প্রশ্নের ক্রমিক নম্বর এর পর অবশ্যই '।' (দাড়ি) ব্যবহার করবেন (যেমন: ১।, ২।, ৩।, ... ১০।)। কখনো '১.' বা '১)' ব্যবহার করবেন না। (তবে ইংরেজি বিষয়ের ক্ষেত্রে স্বাভাবিক ইংরেজি ফরম্যাট '1.', '2.' বজায় রাখবেন)।
      * সৃজনশীল প্রশ্ন (Creative Questions / CQ): এর জন্য সম্পূর্ণ আলাদা ক্রমিক নম্বর হবে (১।, ২।, ৩।, ...)। প্রতিটি সৃজনশীল প্রশ্নের অধীনে উপ-প্রশ্নগুলো অবশ্যই ডট ফরম্যাটে ক., খ., গ., ঘ. থাকবে (কখনো ব্রাকেট যেমন (ক), ক) দেওয়া যাবে না)।
      * বহুনির্বাচনী প্রশ্ন (Multiple Choice Questions / MCQ): এর জন্য সম্পূর্ণ আলাদা ক্রমিক নম্বর হবে এবং এটি পুনরায় ১ থেকে শুরু হবে (১।, ২।, ৩।, ৪।, ... ৩০।)। কখনোই সৃজনশীল প্রশ্নের ক্রমিকের সাথে মিলিয়ে একটানা ক্রমিক দেওয়া যাবে না।
+     * MANDATORY SECTION BREAK FOR COMBINED EXAMS: প্রশ্নপত্রে যদি সৃজনশীল এবং বহুনির্বাচনী উভয় অংশ থাকে, তবে সৃজনশীল অংশ শেষ হওয়ার পর বহুনির্বাচনী হেডার শুরু করার ঠিক পূর্বে অবশ্যই একটি স্বতন্ত্র লাইনে '---SECTION_BREAK:MCQ---' লিখবেন!
      * বিভাগ ভিত্তিক কাঠামো (Section-wise): প্রশ্নপত্রে যদি বিভিন্ন বিভাগ বা অংশ থাকে (যেমন: 'ক-বিভাগ: বহুনির্বাচনী', 'খ-বিভাগ: সৃজনশীল'), তবে প্রতিটি বিভাগে ক্রমিক নম্বর সতন্ত্রভাবে ১।, ২।, ৩।, ... থেকে শুরু হবে।
 
 4. UNTRUNCATED, FULL EXTRACTION OF ALL VISIBLE CONTENT ACROSS ALL PAGES (পৃষ্ঠার সকল লেখার সম্পূর্ণ রূপান্তর):
@@ -1349,9 +1360,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
 
           if (apiKey) {
             if (onProgress) onProgress('⚡ সরাসরি ক্লাউড API দিয়ে দ্রুত রূপান্তর হচ্ছে...', 50);
-            rawText = await executeGeminiRequest(apiKey, mediaItems, (liveChunk) => {
-              if (onStream) onStream(liveChunk);
-              if (onProgress) onProgress(`লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveChunk.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveChunk.length / 30)));
+            rawText = await executeGeminiRequest(apiKey, mediaItems, (liveChunk, activeModel) => {
+              if (onStream) onStream(liveChunk, activeModel);
+              const modelLabel = activeModel ? `[মডেল: ${getModelDisplayName(activeModel)}] ` : '';
+              if (onProgress) onProgress(`${modelLabel}লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveChunk.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveChunk.length / 30)));
             });
           } else {
             throw new Error("প্রো মডেল সাড়া দেয়নি এবং কোনো Gemini API Key পাওয়া যায়নি।");
@@ -1363,9 +1375,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
         if (apiKey) {
           showToast('⚡ ক্লাউড এপিআই দিয়ে দ্রুত সম্পন্ন করা হচ্ছে...', 'info');
           if (onProgress) onProgress('⚡ সরাসরি ক্লাউড API দিয়ে দ্রুত রূপান্তর হচ্ছে...', 50);
-          rawText = await executeGeminiRequest(apiKey, mediaItems, (liveChunk) => {
-            if (onStream) onStream(liveChunk);
-            if (onProgress) onProgress(`লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveChunk.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveChunk.length / 30)));
+          rawText = await executeGeminiRequest(apiKey, mediaItems, (liveChunk, activeModel) => {
+            if (onStream) onStream(liveChunk, activeModel);
+            const modelLabel = activeModel ? `[মডেল: ${getModelDisplayName(activeModel)}] ` : '';
+            if (onProgress) onProgress(`${modelLabel}লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveChunk.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveChunk.length / 30)));
           });
         } else {
           throw new Error("প্রো মডেল সাড়া দেয়নি এবং কোনো Gemini API Key পাওয়া যায়নি।");
@@ -1382,9 +1395,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
         throw new Error('অনুগ্রহ করে আপনার Gemini API Key প্রদান করুন বা সেটিংস থেকে ডেমো মোড চালু করুন।');
       }
     } else {
-      rawText = await executeGeminiRequest(apiKey, mediaItems, (liveChunk) => {
-        if (onStream) onStream(liveChunk);
-        if (onProgress) onProgress(`লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveChunk.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveChunk.length / 30)));
+      rawText = await executeGeminiRequest(apiKey, mediaItems, (liveChunk, activeModel) => {
+        if (onStream) onStream(liveChunk, activeModel);
+        const modelLabel = activeModel ? `[মডেল: ${getModelDisplayName(activeModel)}] ` : '';
+        if (onProgress) onProgress(`${modelLabel}লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveChunk.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveChunk.length / 30)));
       });
     }
 
@@ -1478,9 +1492,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     setLoading(true, total > 1 ? `সবগুলো (${toBengaliNumber(total)}টি) পেজ একসাথে Gemini AI-তে পাঠানো হচ্ছে...` : 'Gemini AI দিয়ে রূপান্তর হচ্ছে...', 45);
 
     try {
-      const text = await executeGeminiRequest(activeKey, mediaItems, (liveText) => {
+      const text = await executeGeminiRequest(activeKey, mediaItems, (liveText, activeModel) => {
         if (elements.outputUnicodeArea) elements.outputUnicodeArea.value = liveText;
-        setLoading(true, `লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveText.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveText.length / 30)));
+        const modelLabel = activeModel ? `[মডেল: ${getModelDisplayName(activeModel)}] ` : '';
+        setLoading(true, `${modelLabel}লাইভ স্ট্রিমিং চলছে (${toBengaliNumber(liveText.length)} অক্ষর)...`, Math.min(95, 45 + Math.round(liveText.length / 30)));
       });
 
       setLoading(false);
@@ -1579,19 +1594,34 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
 
     const activePrompt = customPrompt || GEMINI_PROMPT;
 
-    // Active, verified high-speed Gemini models ordered strictly by stability, speed & math OCR fidelity
-    const allActiveModels = [
-      'gemini-2.5-flash',
-      'gemini-3-flash-preview',
-      'gemini-3.8-flash',
-      'gemini-3.5-flash'
-    ];
+  function getModelDisplayName(m) {
+    if (!m) return '';
+    const map = {
+      'gemini-3.5-flash': 'Gemini 3.5 Flash',
+      'gemini-3.6-flash': 'Gemini 3.6 Flash',
+      'gemini-3.7-flash': 'Gemini 3.7 Flash',
+      'gemini-3.8-flash': 'Gemini 3.8 Flash',
+      'gemini-3-flash': 'Gemini 3 Flash',
+      'gemini-2.5-flash': 'Gemini 2.5 Flash'
+    };
+    return map[m] || m;
+  }
+
+  // Active, verified high-speed Gemini models ordered strictly by stability, speed & math OCR fidelity (excluding Lite models)
+  const allActiveModels = [
+    'gemini-3.5-flash',
+    'gemini-3.6-flash',
+    'gemini-3.7-flash',
+    'gemini-3.8-flash',
+    'gemini-3-flash',
+    'gemini-2.5-flash'
+  ];
 
     // Helper: Build optimal payload tailored per model
     function buildModelPayload(model, isFallbackFormat = false) {
       const genConfig = {
         temperature: 0.2,
-        maxOutputTokens: isFallbackFormat ? 8192 : 65536,
+        maxOutputTokens: isFallbackFormat ? 8192 : 16384,
         thinkingConfig: { thinkingBudget: 0 }
       };
 
@@ -1790,10 +1820,21 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
                       if (fullStreamedText.includes('.......')) {
                         fullStreamedText = fullStreamedText.replace(/\.{8,}/g, '......');
                       }
+
+                      // Repetitive loop detector: Break if model gets stuck in an infinite degenerative loop
+                      if (fullStreamedText.length > 300) {
+                        const tail = fullStreamedText.slice(-300);
+                        const sample = tail.slice(-35).trim();
+                        if (sample.length >= 12 && (tail.split(sample).length - 1) >= 3) {
+                          console.warn(`Repetition loop detected in model ${model}. Aborting stream for this model...`);
+                          break;
+                        }
+                      }
+
                       const cTime = Date.now();
                       if (cTime - lastChunkTime > 60 || fullStreamedText.length < 80) {
                         lastChunkTime = cTime;
-                        if (onStreamChunk) onStreamChunk(fullStreamedText);
+                        if (onStreamChunk) onStreamChunk(fullStreamedText, model);
                       }
                     }
                   } catch (pe) { /* partial chunk */ }
@@ -2297,13 +2338,13 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     text = text.replace(/^[=\-\s]*Page\s*\d+[^\n]*[=\-\s]*\n?/gim, '');
 
     // CRITICAL: Strip any markdown bold asterisks (**)
-    text = text.replace(/\*\*/g, '');
+    // Removed text.replace(/\*\*/g, ''); to preserve bold tags for Layout Builders as requested.
 
     // CRITICAL: Clamp runaway dot repetitions (e.g. ............. -> ......)
     text = text.replace(/\.{8,}/g, '......');
 
     // 1. Clean asterisks around Roman numerals: *i.* -> i., *ii.* -> ii., *iii.* -> iii.
-    text = text.replace(/\*+\s*(i{1,4}|iv|v|vi{0,3}|ix|x)\s*\.\s*\*+/gi, '$1.');
+    text = text.replace(/\*+\s*([ivx]+)\s*\.\s*\*+/gi, '$1.');
     
     // 2. Clean asterisks around inline Roman numerals: *i*, *ii*, *iii*, *i, ii*, *i ও ii*, *i, ii ও iii*
     text = text.replace(/\*+\s*([iIvVxX0-9]+(?:\s*,\s*[iIvVxX0-9]+)*(?:\s*ও\s*[iIvVxX0-9]+)*)\s*\*+/g, '$1');
@@ -2327,17 +2368,8 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     text = text.replace(/(?<=[\s\t\(\[]|\b)২ঞও(?=[\s\t\)\],।]|\b|$)/g, '2H2O');
 
     // 3c. Auto-heal hybrid/corrupted mixed numbers (e.g. 8.8৮ L -> 8.88 L or 8.8৮ -> 8.88)
-    text = text.replace(/([0-9০-৯]*[0-9][0-9০-৯.]*[০-৯][0-9০-৯.]*|[0-9০-৯]*[০-৯][0-9০-৯.]*[0-9][0-9০-৯.]*)(\s*[a-zA-Z%]+)?/g, (match, numPart, trailingUnit) => {
-      const enCount = (numPart.match(/[0-9]/g) || []).length;
-      const bnCount = (numPart.match(/[০-৯]/g) || []).length;
-      const hasLatinUnit = trailingUnit && /[a-zA-Z]/.test(trailingUnit);
-      const bnToEn = { '০':'0', '১':'1', '২':'2', '৩':'3', '৪':'4', '৫':'5', '৬':'6', '৭':'7', '৮':'8', '৯':'9' };
-      const enToBn = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯' };
-      if (enCount >= bnCount || hasLatinUnit) {
-        return numPart.replace(/[০-৯]/g, d => bnToEn[d] || d) + (trailingUnit || '');
-      }
-      return numPart.replace(/[0-9]/g, d => enToBn[d] || d) + (trailingUnit || '');
-    });
+    // Commented out aggressive digit healing to prevent corrupting normal Bengali text. 
+    // Relying on prompt engineering to ensure clean digits as per user feedback.
 
     const rawLines = text.split('\n');
     const cleanedLines = [];
@@ -2402,7 +2434,7 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
       let cleanExp = exp ? exp.replace('^', '') : '';
       return cleanExp ? ` $${unit}^{${cleanExp}}$` : ` ${unit}`;
     });
-    finalOutput = finalOutput.replace(/["']\s*(cm|mm|m|km|gm|kg|sec|s|hr|min|V|W|kW|A|mA|Hz|N|Pa|J)\s*["']/gi, '$1');
+    finalOutput = finalOutput.replace(/(?<=\s|^)["']\s*(cm|mm|m|km|gm|kg|sec|s|hr|min|V|W|kW|A|mA|Hz|N|Pa|J)\s*["'](?=\s|$|[.,!?;:।])/gi, '$1');
     finalOutput = finalOutput.replace(/\b(cm|mm|m|km)\s*(\^?([23]))\b/gi, '$1^$3');
 
     // 6. UNWRAP comma-separated number lists (e.g. $75, 65, 80...$ in Q11)
@@ -2423,8 +2455,8 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     finalOutput = finalOutput.replace(/(?<!\$)\b([A-Z])(?!\$)(?=\s+(?:অন্বয়|সেট|তালিকা|ফাংশন|সম্পর্ক|কে|নির্ণয়))/g, '$$$1$$');
     finalOutput = finalOutput.replace(/(?<!\$)\b([a-zA-Z]\s*[-+]\s*[a-zA-Z]\s*=\s*-?\d+)(?!\$)/g, '$$$1$$');
 
-    // Strip any remaining ** marks and collapse extra enters/blank lines
-    finalOutput = finalOutput.replace(/\*\*/g, '').replace(/\r/g, '').replace(/\n\s*\n+/g, '\n').trim();
+    // Collapse extra enters/blank lines while preserving markdown ** bold tags
+    finalOutput = finalOutput.replace(/\r/g, '').replace(/\n\s*\n+/g, '\n').trim();
 
     return finalOutput;
   }
@@ -2845,7 +2877,22 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
   function detectDocumentLayout(text) {
     if (!text) return 'question-2col';
     
-    // 0. Archetype Profile Detection (Prioritize Combined Paper and Specialized Archetypes)
+    // 0. Explicit Vision Layout Tagging (Highest Priority)
+    const layoutTagMatch = text.match(/^\s*\[LAYOUT:\s*([A-Za-z0-9_\-]+)\]/i);
+    if (layoutTagMatch) {
+      const tag = layoutTagMatch[1].toUpperCase();
+      if (tag === 'COMBINED_EXAM' || tag === 'BENGALI_COMBINED_EXAM') return 'bengali_combined_exam_paper';
+      if (tag === 'CQ_BOOKLET' || tag === 'BENGALI_CQ_PAPER') return 'bengali-cq-paper';
+      if (tag === 'MCQ_2COL' || tag === 'BENGALI_MCQ_PAPER') return 'mcq-grid';
+      if (tag === 'MATH_SCIENCE') return 'math-science';
+      if (tag === 'OFFICIAL_NOTICE') return 'official-notice';
+      if (tag === 'APPLICATION_LETTER') return 'standard-doc';
+      if (tag === 'TABULATION_SHEET') return 'tabulation-sheet';
+      if (tag === 'LEGAL_DEED') return 'legal-deed';
+      if (tag === 'GENERAL_DOC') return 'standard-doc';
+    }
+
+    // 0.1 Archetype Profile Detection (Prioritize Combined Paper and Specialized Archetypes)
     if (typeof MdLayoutParser !== 'undefined' && typeof MdLayoutParser.detectDocumentProfile === 'function') {
       const profile = MdLayoutParser.detectDocumentProfile(text);
       if (profile) {
@@ -2860,6 +2907,9 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
         }
         if (profile.archetypeId === 'official_notice_memo') {
           return 'official-notice';
+        }
+        if (profile.archetypeId === 'single_column_standard_document') {
+          return 'standard-doc';
         }
       }
     }
@@ -2938,8 +2988,10 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
 
       try {
         let docBlob = null;
-        // Master DOCX First: Build layout-perfect DOCX, then convert via tested DocxToDocConverter to protect equations
-        if (ast && typeof DocxLayoutBuilder !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
+        // NATIVE WORD 2003 LAYOUT BUILDER (Strictly prioritized for 2-column, booklet, and margin fidelity)
+        if (ast && typeof DocWord2003Builder !== 'undefined') {
+          docBlob = DocWord2003Builder.build(ast, { font: 'SutonnyMJ' });
+        } else if (ast && typeof DocxLayoutBuilder !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
           const bijoyDocxBlob = await DocxLayoutBuilder.build(ast, { font: 'SutonnyMJ' });
           const docxConverter = new DocxToDocConverter();
           const docResult = await docxConverter.convertDocxToDoc(bijoyDocxBlob, {
@@ -2949,8 +3001,6 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
             optimizeForQuestionPaper: true
           });
           docBlob = docResult.blob || docResult.convertedBlob;
-        } else if (ast && typeof DocWord2003Builder !== 'undefined') {
-          docBlob = DocWord2003Builder.build(ast, { font: 'SutonnyMJ' });
         } else if (typeof DocxHandler !== 'undefined' && typeof DocxHandler.createDocFromText === 'function') {
           docBlob = DocxHandler.createDocFromText(text, 'SutonnyMJ', true, fontSizePt, {
             pageSize: pageSizeVal,

@@ -3370,8 +3370,10 @@ function initUnifiedConverterEngine() {
         const detectedLayout = detectFn(text);
         const ast = MdLayoutParser.parse(text, { layout: detectedLayout, pageSize });
 
-        // Master DOCX First: Convert via tested DocxToDocConverter to protect equations and columns
-        if (typeof DocxLayoutBuilder !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
+        // Native Word 2003 Layout Builder (prioritized for full multi-column layout fidelity)
+        if (typeof DocWord2003Builder !== 'undefined') {
+          docBlob = DocWord2003Builder.build(ast, { font: fontName });
+        } else if (typeof DocxLayoutBuilder !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
           const docxBlob = await DocxLayoutBuilder.build(ast, { font: fontName });
           const docxConverter = new DocxToDocConverter();
           const docResult = await docxConverter.convertDocxToDoc(docxBlob, {
@@ -3381,8 +3383,6 @@ function initUnifiedConverterEngine() {
             optimizeForQuestionPaper: true
           });
           docBlob = docResult.blob || docResult.convertedBlob;
-        } else if (typeof DocWord2003Builder !== 'undefined') {
-          docBlob = DocWord2003Builder.build(ast, { font: fontName });
         }
       } else if (typeof DocxHandler !== 'undefined') {
         docBlob = DocxHandler.createDocFromText(text, fontName, isU2B, 12, { pageSize, margin });

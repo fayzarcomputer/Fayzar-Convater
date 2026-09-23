@@ -45,12 +45,40 @@
         if (!str) return '';
         if (isPureEnglish) return str;
         if (isBijoy) {
-          if (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function') {
-            return BanglaConverter.unicodeToBijoy(str);
+          const romanRegex = /\b(i{1,3}|iv|v|vi{0,3}|ix|x)\b/gi;
+          const s = String(str);
+          if (!romanRegex.test(s)) {
+            if (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function') {
+              return BanglaConverter.unicodeToBijoy(s);
+            }
+            if (typeof BanglaConverterEngine !== 'undefined' && typeof BanglaConverterEngine.convertUnicodeToBijoy === 'function') {
+              return BanglaConverterEngine.convertUnicodeToBijoy(s);
+            }
+            return s;
           }
-          if (typeof BanglaConverterEngine !== 'undefined' && typeof BanglaConverterEngine.convertUnicodeToBijoy === 'function') {
-            return BanglaConverterEngine.convertUnicodeToBijoy(str);
+          romanRegex.lastIndex = 0;
+          const tokens = [];
+          let lastIdx = 0;
+          let m;
+          while ((m = romanRegex.exec(s)) !== null) {
+            if (m.index > lastIdx) {
+              const before = s.slice(lastIdx, m.index);
+              const cvted = (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function')
+                ? BanglaConverter.unicodeToBijoy(before)
+                : before;
+              tokens.push(cvted);
+            }
+            tokens.push(`<span style="font-family:'Times New Roman',serif;">${m[1]}</span>`);
+            lastIdx = m.index + m[0].length;
           }
+          if (lastIdx < s.length) {
+            const after = s.slice(lastIdx);
+            const cvted = (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function')
+              ? BanglaConverter.unicodeToBijoy(after)
+              : after;
+            tokens.push(cvted);
+          }
+          return tokens.join('');
         }
         return str;
       };
@@ -60,38 +88,136 @@
       // 1. Build Header HTML
       const headerHtml = DocWord2003Builder.buildHeaderHtml(meta, layout, cvt);
 
-      // 2. Build Body Content (Combined, 1-Column, or 2-Column)
+      // 2. Build Native Word 2003 Sections (Combined, Standalone MCQ, CQ Booklet, or Standard)
       opts.onProgress(60, 'প্রশ্নপত্র ও কলাম কাঠামো বিন্যাস হচ্ছে...');
-      let bodyHtml = '';
 
-      if (layout.profile && layout.profile.archetypeId === 'bengali_combined_exam_paper') {
-        const breakIdx = parsedAst.blocks.findIndex(b => b.type === 'section_break');
-        if (breakIdx !== -1) {
-          const cqBlocks = parsedAst.blocks.slice(0, breakIdx);
-          const mcqBlocks = parsedAst.blocks.slice(breakIdx + 1);
-          bodyHtml = DocWord2003Builder.buildSingleColumnContent(cqBlocks, cvt, targetFont)
-            + `<div style="page-break-before:always; margin:10pt 0 6pt 0; border-top:1.5pt solid #000; padding-top:4pt;">&nbsp;</div>`
-            + DocWord2003Builder.buildTwoColumnContent(mcqBlocks, cvt, targetFont);
-        } else {
-          bodyHtml = DocWord2003Builder.buildSingleColumnContent(parsedAst.blocks, cvt, targetFont);
-        }
-      } else if (layout.columns === 2) {
-        bodyHtml = DocWord2003Builder.buildTwoColumnContent(parsedAst.blocks, cvt, targetFont);
-      } else {
-        bodyHtml = DocWord2003Builder.buildSingleColumnContent(parsedAst.blocks, cvt, targetFont);
-      }
+      const archetypeId = (layout.profile && layout.profile.archetypeId) || '';
+      const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper';
+      const isCqPaper = archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq';
+      const isCombined = archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq'));
 
-      // 3. Stamp Margin for Legal Deeds
+      let sections = [];
+
+      // Stamp Margin for Legal Deeds
       let stampGapHtml = '';
       if (layout.stampMarginInches > 0) {
         stampGapHtml = `<div style="height:${(layout.stampMarginInches * 72).toFixed(0)}pt; mso-height-rule:exactly;">&nbsp;</div>`;
       }
 
-      // 4. Construct Full Word 2003 Mso HTML Document
+      if (isCombined) {
+        const breakIdx = parsedAst.blocks.findIndex(b => b.type === 'section_break');
+        if (breakIdx !== -1) {
+          const cqBlocks = parsedAst.blocks.slice(0, breakIdx);
+          const breakBlock = parsedAst.blocks[breakIdx];
+          const mcqBlocks = parsedAst.blocks.slice(breakIdx + 1);
+
+          // Section 1: CQ (Landscape Booklet, 2 Columns, 0.7in gap, 0.5in margins, initial col break)
+          sections.push({
+            pageSize: 'a4',
+            orientation: 'landscape',
+            margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+            cols: 2,
+            colGap: '0.7in',
+            hasSeparator: false,
+            isContinuous: false,
+            startWithColumnBreak: true, // Imposition: text starts in Page 1 Right column
+            html: headerHtml + DocWord2003Builder.renderBlocks(cqBlocks, cvt, targetFont)
+          });
+
+          // Section 2: MCQ Header (Portrait, 1 Column, 0.5in margins)
+          let mcqHeaderHtml = '';
+          if (breakBlock && breakBlock.mcqHeader) {
+            mcqHeaderHtml = DocWord2003Builder.renderMcqHeaderBlock(breakBlock.mcqHeader, cvt);
+          } else {
+            mcqHeaderHtml = `<div style="text-align:center; margin-bottom:8pt;"><p style="font-size:13pt; font-weight:bold; margin:6pt 0 4pt 0; text-align:center;">${cvt('বহুনির্বাচনী অভীক্ষা')}</p><hr style="border:0; border-top:1pt solid #000; margin:4pt 0 8pt 0;"/></div>`;
+          }
+
+          sections.push({
+            pageSize: 'a4',
+            orientation: 'portrait',
+            margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+            cols: 1,
+            colGap: '0in',
+            hasSeparator: false,
+            isContinuous: false, // Next page break
+            startWithColumnBreak: false,
+            html: mcqHeaderHtml
+          });
+
+          // Section 3: MCQ Questions (Portrait, 2 Columns, 0.2in gap, solid separator, 0.5in margins)
+          sections.push({
+            pageSize: 'a4',
+            orientation: 'portrait',
+            margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+            cols: 2,
+            colGap: '0.2in',
+            hasSeparator: true,
+            isContinuous: true, // Continuous break directly under MCQ header
+            startWithColumnBreak: false,
+            html: DocWord2003Builder.renderBlocks(mcqBlocks, cvt, targetFont)
+          });
+        } else {
+          sections.push({
+            pageSize: 'a4',
+            orientation: 'portrait',
+            margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+            cols: 1,
+            html: headerHtml + DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
+          });
+        }
+      } else if (isMcqPaper || (layout.columns === 2 && !isCqPaper)) {
+        // Standalone MCQ Paper (30 marks):
+        // Section 1: Header (1 Column, 0.5in margins)
+        sections.push({
+          pageSize: 'a4',
+          orientation: 'portrait',
+          margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 1,
+          isContinuous: false,
+          startWithColumnBreak: false,
+          html: headerHtml
+        });
+
+        // Section 2: MCQ Questions (2 Columns, 0.2in gap, solid separator, 0.5in margins)
+        sections.push({
+          pageSize: 'a4',
+          orientation: 'portrait',
+          margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 2,
+          colGap: '0.2in',
+          hasSeparator: true,
+          isContinuous: true, // Continuous break directly below header!
+          startWithColumnBreak: false,
+          html: DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
+        });
+      } else if (isCqPaper) {
+        // Standalone Creative Question Paper (Landscape 2-page booklet, 2 cols, 0.7in gap, 0.5in margins)
+        sections.push({
+          pageSize: 'a4',
+          orientation: 'landscape',
+          margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 2,
+          colGap: '0.7in',
+          hasSeparator: false,
+          isContinuous: false,
+          startWithColumnBreak: true, // Column 1 skipped, begins Page 1 Right
+          html: headerHtml + DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
+        });
+      } else {
+        // Default 1-column document
+        sections.push({
+          pageSize: layout.pageSize || 'a4',
+          orientation: layout.orientation || 'portrait',
+          margins: layout.margins || { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 1,
+          html: headerHtml + DocWord2003Builder.renderBlocks(parsedAst.blocks, cvt, targetFont)
+        });
+      }
+
+      // 3. Construct Full Word 2003 Mso HTML Document
       opts.onProgress(85, 'ওয়ার্ড ২০০৩ স্পেসিফিকেশন প্যাকেজিং হচ্ছে...');
       const fullHtml = DocWord2003Builder.assembleWordDocument({
-        headerHtml: headerHtml,
-        bodyHtml: bodyHtml,
+        sections: sections,
         stampGapHtml: stampGapHtml,
         meta: meta,
         layout: layout,
@@ -173,61 +299,149 @@
     }
 
     /**
-     * Builds 2-Column Content using a balanced 2-column table for 100% Word 2003 fidelity
+     * Renders an array of blocks to Word 2003 HTML
      */
-    static buildTwoColumnContent(blocks, cvt, targetFont) {
-      // Divide blocks into 2 roughly equal groups
-      const col1 = [];
-      const col2 = [];
-      let totalWeight = 0;
-
-      // Estimate weight of each block
-      const weights = blocks.map(b => {
-        if (b.type === 'question') return 3 + (b.subQuestions ? b.subQuestions.length * 2 : 0);
-        if (b.type === 'table') return 6 + (b.rows ? b.rows.length : 0);
-        if (b.type === 'heading') return 2;
-        return 1;
-      });
-
-      const halfWeight = weights.reduce((a, b) => a + b, 0) / 2;
-      let currentWeight = 0;
-
-      for (let i = 0; i < blocks.length; i++) {
-        if (currentWeight < halfWeight || col1.length === 0) {
-          col1.push(blocks[i]);
-          currentWeight += weights[i];
-        } else {
-          col2.push(blocks[i]);
-        }
-      }
-
-      const col1Html = col1.map(b => DocWord2003Builder.renderBlock(b, cvt, targetFont)).join('\n');
-      const col2Html = col2.map(b => DocWord2003Builder.renderBlock(b, cvt, targetFont)).join('\n');
-
-      return `
-      <table class="MsoTwoColumnTable" style="width:100%; border-collapse:collapse; border:none; mso-table-layout-alt:fixed; margin:0; padding:0;">
-        <tr>
-          <!-- Column 1 -->
-          <td style="width:48.5%; vertical-align:top; border:none; padding-right:8pt; mso-padding-right-alt:8pt;">
-            ${col1Html}
-          </td>
-          <!-- Column Divider Space -->
-          <td style="width:3%; vertical-align:top; border:none; border-right:0.5pt dashed #999; mso-border-right-alt:0.5pt dashed #999;">
-            &nbsp;
-          </td>
-          <!-- Column 2 -->
-          <td style="width:48.5%; vertical-align:top; border:none; padding-left:8pt; mso-padding-left-alt:8pt;">
-            ${col2Html}
-          </td>
-        </tr>
-      </table>`;
+    static renderBlocks(blocks, cvt, targetFont) {
+      if (!blocks || blocks.length === 0) return '';
+      return blocks.map(b => DocWord2003Builder.renderBlock(b, cvt, targetFont)).join('\n');
     }
 
     /**
-     * Builds 1-Column Content
+     * Renders standalone MCQ Header block across 1 full column
+     */
+    static renderMcqHeaderBlock(h, cvt) {
+      let hHtml = '<div style="text-align:center; margin-bottom:8pt;">';
+      if (h.institute) hHtml += `<p style="font-size:15pt; font-weight:bold; margin:0 0 2pt 0; text-align:center; line-height:1.2;">${cvt(h.institute)}</p>`;
+      if (h.subHeader) hHtml += `<p style="font-size:10pt; font-weight:bold; margin:0 0 2pt 0; text-align:center; line-height:1.2;">${cvt(h.subHeader)}</p>`;
+      if (h.exam) hHtml += `<p style="font-size:13pt; font-weight:bold; margin:0 0 2pt 0; text-align:center; line-height:1.2;">${cvt(h.exam)}</p>`;
+      if (h.grade) hHtml += `<p style="font-size:10.5pt; font-weight:bold; margin:0 0 2pt 0; text-align:center; line-height:1.2;">${cvt(h.grade)}</p>`;
+      if (h.subjectCode) {
+        const digits = String(h.subjectCode).replace(/\D/g, '').split('');
+        const codeDigits = digits.length > 0 ? digits : ['১', '০', '১'];
+        const cells = codeDigits.map(d => `<td style="border:1pt solid #000; width:16pt; text-align:center; font-size:10pt; font-weight:bold; padding:1pt;">${cvt(d)}</td>`).join('');
+        hHtml += `<div style="text-align:center; margin:3pt 0 4pt 0;"><span style="font-size:10pt;">${cvt('বিষয় কোড: ')}</span><table align="center" style="display:inline-table; border-collapse:collapse; margin-left:4pt;"><tr>${cells}</tr></table></div>`;
+      }
+      if (h.timeMarks || h.title) {
+        const titleText = h.title || 'বহুনির্বাচনি অভীক্ষা';
+        hHtml += `<p style="font-size:11.5pt; font-weight:bold; margin:3pt 0 3pt 0; text-align:center; line-height:1.2;">${cvt(h.timeMarks ? h.timeMarks : titleText)}</p>`;
+      }
+      if (h.note) hHtml += `<p style="font-size:9.5pt; font-style:italic; margin:2pt 0 6pt 0; text-align:center; line-height:1.2;">${cvt(h.note)}</p>`;
+      hHtml += '<hr style="border:0; border-top:1pt solid #000; margin:4pt 0 8pt 0;"/></div>';
+      return hHtml;
+    }
+
+    /**
+     * Extracts MCQ options from subQuestions
+     */
+    static extractMcqOptions(subQuestions) {
+      if (!subQuestions || subQuestions.length === 0) return null;
+
+      // If any item has explicit marks, it is a creative subquestion, NOT MCQ!
+      const hasMarks = subQuestions.some(s => s.marks && String(s.marks).trim().length > 0);
+      if (hasMarks) return null;
+
+      const pattern = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/gi;
+
+      // Case 1: Check distinct subQuestions representing options (handling isMcqOptionsRow)
+      const optionSubs = subQuestions.filter(s =>
+        /^(?:\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((s.subId || '').trim()) ||
+        (s.isMcqOptionsRow && /^(?:\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((s.text || '').trim()))
+      );
+      if (optionSubs.length >= 4) {
+        return optionSubs.slice(0, 4).map(s => ({
+          label: s.subId || '',
+          text: s.text || ''
+        }));
+      }
+
+      // Case 2: embedded options in 1 or more rows containing (ক)...(খ)...(গ)...(ঘ)
+      const fullText = subQuestions.map(s => (s.subId ? s.subId + ' ' : '') + s.text).join(' ');
+      const matches = [...fullText.matchAll(pattern)];
+      if (matches.length >= 4) {
+        const optMatches = matches.length === 4 ? matches : matches.slice(-4);
+        const opts = [];
+        for (let i = 0; i < 4; i++) {
+          const lbl = optMatches[i][0];
+          const start = optMatches[i].index + lbl.length;
+          const end = (i + 1 < 4) ? optMatches[i + 1].index : fullText.length;
+          opts.push({
+            label: lbl,
+            text: fullText.substring(start, end).trim()
+          });
+        }
+        return opts;
+      }
+
+      // Case 3: Check isMcqOptionsRow flag fallback
+      const mcqRows = subQuestions.filter(s => s.isMcqOptionsRow && !s.isPromptText);
+      if (mcqRows.length >= 4) {
+        return mcqRows.slice(0, 4).map(s => ({
+          label: s.subId || '',
+          text: s.text || ''
+        }));
+      }
+
+      return null;
+    }
+
+    /**
+     * Formats MCQ options in 4 equal columns (or 2 columns across 2 lines when long)
+     */
+    static formatMcqOptionsHtml(optionsList, cvt, formatMath) {
+      if (!optionsList || optionsList.length === 0) return '';
+      const formatted = optionsList.map(opt => ({
+        label: cvt(opt.label || ''),
+        text: formatMath(opt.text || '')
+      }));
+
+      const getVisualLength = (str) => {
+        if (!str) return 0;
+        return str.replace(/[\u09BE-\u09CC\u09CD\u0981-\u0983\u09D7]/g, '').length;
+      };
+
+      const totalLen = optionsList.reduce((sum, o) => sum + getVisualLength(o.text || ''), 0);
+      const maxSingleLen = Math.max(...optionsList.map(o => getVisualLength(o.text || '')));
+
+      // 4 Options fit in 1 line across 4 equal columns (short options)
+      // Matches sample Sec3 P5: Tabs=[11.7pt] [69.8pt] [127.8pt] [185.4pt]
+      if (formatted.length === 4 && totalLen <= 56 && maxSingleLen <= 15) {
+        return `<p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;margin-bottom:1.5pt;line-height:normal;tab-stops:11.7pt 69.8pt 127.8pt 185.4pt 351.9pt;">` +
+          `${formatted[0].label}&nbsp;${formatted[0].text}<span style='mso-tab-count:1'>&nbsp;</span>` +
+          `${formatted[1].label}&nbsp;${formatted[1].text}<span style='mso-tab-count:1'>&nbsp;</span>` +
+          `${formatted[2].label}&nbsp;${formatted[2].text}<span style='mso-tab-count:1'>&nbsp;</span>` +
+          `${formatted[3].label}&nbsp;${formatted[3].text}</p>`;
+      }
+
+      // 4 Options split into 2 lines x 2 columns (medium/long options)
+      // Matches sample Sec3 P2/P3: Tabs=[11.7pt] [127.8pt] with single tab jump
+      if (formatted.length === 4 && totalLen <= 120 && maxSingleLen <= 32) {
+        return `<p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;margin-bottom:1pt;line-height:normal;tab-stops:11.7pt 127.8pt 351.9pt;">` +
+          `${formatted[0].label}&nbsp;${formatted[0].text}<span style='mso-tab-count:1'>&nbsp;</span>` +
+          `${formatted[1].label}&nbsp;${formatted[1].text}</p>\n` +
+          `<p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;margin-bottom:1.5pt;line-height:normal;tab-stops:11.7pt 127.8pt 351.9pt;">` +
+          `${formatted[2].label}&nbsp;${formatted[2].text}<span style='mso-tab-count:1'>&nbsp;</span>` +
+          `${formatted[3].label}&nbsp;${formatted[3].text}</p>`;
+      }
+
+      // Very long options: each gets its own line with 11.7pt indent
+      return formatted.map(opt =>
+        `<p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;margin-bottom:1pt;line-height:1.2;">` +
+        `${opt.label}&nbsp;${opt.text}</p>`
+      ).join('\n');
+    }
+
+    /**
+     * Builds 2-Column Content (legacy fallback)
+     */
+    static buildTwoColumnContent(blocks, cvt, targetFont) {
+      return DocWord2003Builder.renderBlocks(blocks, cvt, targetFont);
+    }
+
+    /**
+     * Builds 1-Column Content (legacy fallback)
      */
     static buildSingleColumnContent(blocks, cvt, targetFont) {
-      return blocks.map(b => DocWord2003Builder.renderBlock(b, cvt, targetFont)).join('\n');
+      return DocWord2003Builder.renderBlocks(blocks, cvt, targetFont);
     }
 
     /**
@@ -235,7 +449,25 @@
      */
     static formatMath(text, cvt) {
       if (!text) return '';
+      // Support markdown bold (**bold**) by converting to HTML <b> tags safely outside cvt
+      if (text.includes('**')) {
+        const parts = text.split(/(\*\*[^*]+\*\*)/g);
+        let out = '';
+        for (const part of parts) {
+          if (!part) continue;
+          if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+            out += '<b>' + DocWord2003Builder.formatMath(part.slice(2, -2), cvt) + '</b>';
+          } else {
+            out += DocWord2003Builder.formatMath(part, cvt);
+          }
+        }
+        return out;
+      }
+
       let s = text.replace(/\\rightarrow\b|\\to\b/g, '→');
+      // Auto-wrap bare LaTeX \frac and \sqrt with $ if not wrapped
+      s = s.replace(/(?<!\$)(?:\\frac\{[^{}]*\}\{[^{}]*\}|\\sqrt\{[^{}]*\})(?!\$)/g, '$$$&$$');
+
       const EqConv = (typeof EquationConverter !== 'undefined') ? EquationConverter : (typeof globalThis !== 'undefined' && globalThis.EquationConverter ? globalThis.EquationConverter : null);
       if (EqConv && /\$|\\frac|\\sqrt|\^|_/.test(s)) {
         const segments = EqConv.splitTextAndMath(s);
@@ -252,7 +484,14 @@
         }
         return out;
       }
-      return cvt(s);
+      
+      // Simple HTML fallback if EquationConverter is not available or fails
+      let fallback = s.replace(/\$/g, '');
+      fallback = fallback.replace(/_\{([^}]+)\}/g, '<sub>$1</sub>').replace(/_([a-zA-Z0-9]+)/g, '<sub>$1</sub>');
+      fallback = fallback.replace(/\^\{([^}]+)\}/g, '<sup>$1</sup>').replace(/\^([a-zA-Z0-9]+)/g, '<sup>$1</sup>');
+      fallback = fallback.replace(/\\rightarrow\b|\\to\b/g, '→');
+      
+      return cvt(fallback);
     }
 
     /**
@@ -303,78 +542,74 @@
         }
 
         case 'question': {
-          let html = '<div class="MsoQuestionBlock" style="margin-bottom:6pt;">';
-          const rawDelim = block.delimiter || (isPureEnglish ? '.' : '।');
-          const qNumDelim = (isPureEnglish || rawDelim === '.') ? '. ' : (rawDelim.trim() + ' ');
+          let html = '<div class="MsoQuestionBlock" style="margin-bottom:4pt;">';
+          const isMcq = (block.subQuestions && DocWord2003Builder.extractMcqOptions(block.subQuestions) != null);
+          const rawDelim = block.delimiter || (isPureEnglish ? '.' : (isMcq ? '।' : '.'));
           const formattedMarks = block.marks ? ((isPureEnglish || block.marks.includes('=')) ? `[${block.marks}]` : cvt(block.marks)) : '';
 
-          // Question header row with hanging indent (number in dedicated column)
-          html += `
-          <table style="width:100%; border:none; border-collapse:collapse; margin:0; padding:0;">
-            <tr>
-              <td style="width:22pt; vertical-align:top; border:none; font-size:11pt; font-weight:bold; white-space:nowrap; padding:0;">
-                ${cvt(block.number + qNumDelim)}
-              </td>
-              <td style="text-align:left; vertical-align:top; border:none; font-size:11pt; line-height:1.25; padding:0 4pt;">
-                ${formatMath(block.text)}
-              </td>
-              ${formattedMarks ? `
-              <td style="text-align:right; vertical-align:top; border:none; width:36pt; white-space:nowrap; font-size:11pt; font-weight:bold; padding:0;">
-                ${formattedMarks}
-              </td>` : ''}
-            </tr>
-          </table>`;
+          // Question paragraph:
+          // For MCQ: single space after serial number without tab jump to avoid wide gaps on 2-digit numbers (10+)
+          // For CQ: native hanging indent matching sample P7
+          if (isMcq) {
+            html += `
+            <p class="MsoNormal" style="margin-left:0pt;text-indent:0pt;margin-bottom:1.5pt;line-height:normal;text-align:justify;">
+              <b>${cvt(block.number)}${rawDelim === '.' ? '.' : cvt(rawDelim)}&nbsp;</b>${formatMath(block.text)}${formattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${formattedMarks}</b>` : ''}
+            </p>`;
+          } else {
+            html += `
+            <p class="MsoNormal" style="margin-left:11.7pt;text-indent:-11.7pt;tab-stops:11.7pt 24.75pt 351pt;margin-bottom:2pt;line-height:normal;text-align:justify;">
+              <b>${cvt(block.number)}${rawDelim === '.' ? '.' : cvt(rawDelim)}</b><span style='mso-tab-count:1'>&nbsp;</span>${formatMath(block.text)}${formattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${formattedMarks}</b>` : ''}
+            </p>`;
+          }
 
-          // Stimulus if any
+          // Stimulus if any: aligned directly at 11.7pt (never under number)
           if (block.stimulus) {
             const stimLines = block.stimulus.split('\n');
             for (const sLine of stimLines) {
               if (!sLine.trim()) continue;
-              html += `<p style="font-size:10.5pt; margin:1pt 0 2pt 22pt; line-height:1.2;">${formatMath(sLine)}</p>`;
+              html += `<p class="MsoNormal" style="margin-left:11.7pt;margin-bottom:2pt;line-height:1.2;text-align:justify;">${formatMath(sLine)}</p>`;
             }
           }
 
           // Sub-questions (ক, খ, গ, ঘ) or MCQ options
           if (block.subQuestions && block.subQuestions.length > 0) {
-            for (const sub of block.subQuestions) {
-              const isMcqRow = sub.isMcqOptionsRow || /(?:[খ-ঘ][\.\)]|\t)/.test(sub.text);
-              const subFormattedMarks = sub.marks ? ((isPureEnglish || sub.marks.includes('=')) ? `[${sub.marks}]` : cvt(sub.marks)) : '';
+            const mcqOptions = DocWord2003Builder.extractMcqOptions(block.subQuestions);
+            if (mcqOptions && mcqOptions.length >= 2) {
+              // Extract any non-option prompts (like 'নিচের কোনটি সঠিক?' or Roman numeral statements)
+              for (const sub of block.subQuestions) {
+                const isOptionLine = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((sub.subId || '') + ' ' + (sub.text || ''));
+                if (!isOptionLine) {
+                  if (sub.isPromptText) {
+                    html += `<p class="MsoNormal" style="margin-left:11.7pt;font-weight:bold;margin-bottom:2pt;line-height:normal;">${formatMath(sub.text)}</p>`;
+                  } else if (/^(?:[iIvVxX]+|[0-9]+)[\.\)]/.test(sub.subId || '')) {
+                    const isRoman = /^[iIvVxX]+[\.\)]/.test(sub.subId || '');
+                    const rIdHtml = isRoman
+                      ? `<span style="font-family:'Times New Roman',serif;">${sub.subId}</span>`
+                      : `<b>${cvt(sub.subId)}</b>`;
+                    html += `<p class="MsoNormal" style="margin-left:11.7pt;margin-bottom:1pt;line-height:normal;">${rIdHtml}&nbsp;${formatMath(sub.text)}</p>`;
+                  } else {
+                    html += `<p class="MsoNormal" style="margin-left:11.7pt;margin-bottom:1.5pt;line-height:normal;">${formatMath((sub.subId ? sub.subId + '&nbsp;' : '') + sub.text)}</p>`;
+                  }
+                }
+              }
 
-              if (sub.isPromptText) {
-                html += `<p style="font-size:10.5pt; font-weight:bold; margin:2pt 0 2pt 22pt;">${formatMath(sub.text)}</p>`;
-              } else if (isMcqRow) {
-                // MCQ Options: Aligned cleanly under question text without double indent
-                html += `
-                <table style="width:100%; border:none; border-collapse:collapse; margin:1pt 0; padding:0;">
-                  <tr>
-                    <td style="width:22pt; border:none; padding:0;">&nbsp;</td>
-                    <td style="text-align:left; vertical-align:top; border:none; font-size:10.5pt; line-height:1.25; padding:0 4pt;">
-                      ${formatMath((sub.subId ? sub.subId + ' ' : '') + sub.text)}
-                    </td>
-                    ${subFormattedMarks ? `
-                    <td style="text-align:right; vertical-align:top; border:none; width:36pt; white-space:nowrap; font-size:10.5pt; font-weight:bold; padding:0;">
-                      ${subFormattedMarks}
-                    </td>` : ''}
-                  </tr>
-                </table>`;
-              } else {
-                // Standard Creative Sub-question: Hanging indent
-                html += `
-                <table style="width:100%; border:none; border-collapse:collapse; margin:1pt 0; padding:0;">
-                  <tr>
-                    <td style="width:22pt; border:none; padding:0;">&nbsp;</td>
-                    <td style="width:22pt; vertical-align:top; border:none; font-size:10.5pt; font-weight:bold; white-space:nowrap; padding:0;">
-                      ${cvt(sub.subId)}
-                    </td>
-                    <td style="text-align:left; vertical-align:top; border:none; font-size:10.5pt; line-height:1.25; padding:0 4pt;">
-                      ${formatMath(sub.text)}
-                    </td>
-                    ${subFormattedMarks ? `
-                    <td style="text-align:right; vertical-align:top; border:none; width:36pt; white-space:nowrap; font-size:10.5pt; font-weight:bold; padding:0;">
-                      ${subFormattedMarks}
-                    </td>` : ''}
-                  </tr>
-                </table>`;
+              // Render MCQ Options formatted in 4 equal columns (or 2 columns if long)
+              html += DocWord2003Builder.formatMcqOptionsHtml(mcqOptions, cvt, formatMath);
+            } else {
+              // Standard Creative Sub-questions ((ক), (খ), (গ), (ঘ)) with marks
+              // Matches sample P8: Left=11.7pt, FirstLine=0pt, K. text\t1 (tab directly to 351pt)
+              for (const sub of block.subQuestions) {
+                const subFormattedMarks = sub.marks ? ((isPureEnglish || sub.marks.includes('=')) ? `[${sub.marks}]` : cvt(sub.marks)) : '';
+                if (sub.isPromptText) {
+                  html += `<p class="MsoNormal" style="margin-left:11.7pt;font-weight:bold;margin-bottom:2pt;line-height:normal;">${formatMath(sub.text)}</p>`;
+                } else {
+                  const sId = (sub.subId || '').trim();
+                  const sIdFormatted = sId ? (sId.endsWith('.') ? sId : sId + '.') : '';
+                  html += `
+                  <p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;tab-stops:11.7pt 24.75pt 351pt;margin-bottom:1.5pt;line-height:normal;text-align:justify;">
+                    <b>${cvt(sIdFormatted)}&nbsp;</b>${formatMath(sub.text)}${subFormattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${subFormattedMarks}</b>` : ''}
+                  </p>`;
+                }
               }
             }
           }
@@ -422,7 +657,7 @@
         case 'unordered_list': {
           let listHtml = '<ul style="margin:2pt 0 4pt 15pt; padding:0;">';
           block.items.forEach(item => {
-            listHtml += `<li style="font-size:11pt; margin-bottom:1.5pt; line-height:1.25;">${cvt(item)}</li>`;
+            listHtml += `<li style="font-size:12pt; margin-bottom:1.5pt; line-height:1.25;">${cvt(item)}</li>`;
           });
           listHtml += '</ul>';
           return listHtml;
@@ -431,7 +666,7 @@
         case 'ordered_list': {
           let listHtml = '<ol style="margin:2pt 0 4pt 15pt; padding:0;">';
           block.items.forEach(item => {
-            listHtml += `<li style="font-size:11pt; margin-bottom:1.5pt; line-height:1.25;">${cvt(item.text)}</li>`;
+            listHtml += `<li style="font-size:12pt; margin-bottom:1.5pt; line-height:1.25;">${cvt(item.text)}</li>`;
           });
           listHtml += '</ol>';
           return listHtml;
@@ -443,7 +678,7 @@
 
         case 'paragraph':
         default: {
-          return `<p style="font-size:11pt; margin:0 0 4pt 0; line-height:1.25; text-align:justify;">${cvt(block.text)}</p>`;
+          return `<p style="font-size:12pt; margin:0 0 4pt 0; line-height:1.25; text-align:justify;">${cvt(block.text)}</p>`;
         }
       }
     }
@@ -451,13 +686,66 @@
     /**
      * Assembles the complete Word 2003 Mso HTML structure
      */
-    static assembleWordDocument({ headerHtml, bodyHtml, stampGapHtml, meta, layout, fontFamily }) {
-      const pageW = layout.pageSize === 'legal' ? '612.0pt' : (layout.orientation === 'landscape' ? '841.9pt' : '595.3pt');
-      const pageH = layout.pageSize === 'legal' ? '1008.0pt' : (layout.orientation === 'landscape' ? '595.3pt' : '841.9pt');
-      const mTop = (layout.margins.top * 72).toFixed(1) + 'pt';
-      const mBottom = (layout.margins.bottom * 72).toFixed(1) + 'pt';
-      const mLeft = (layout.margins.left * 72).toFixed(1) + 'pt';
-      const mRight = (layout.margins.right * 72).toFixed(1) + 'pt';
+    static assembleWordDocument({ sections, headerHtml, bodyHtml, stampGapHtml, meta, layout, fontFamily }) {
+      let pageSections = [];
+      if (sections && sections.length > 0) {
+        pageSections = sections;
+      } else {
+        pageSections = [{
+          pageSize: layout && layout.pageSize || 'a4',
+          orientation: layout && layout.orientation || 'portrait',
+          margins: (layout && layout.margins) || { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+          cols: 1,
+          html: `${stampGapHtml || ''}${headerHtml || ''}${bodyHtml || ''}`,
+          isContinuous: false,
+          startWithColumnBreak: false
+        }];
+      }
+
+      let pageStyles = [];
+      let divStyles = [];
+
+      pageSections.forEach((sec, idx) => {
+        const sNum = idx + 1;
+        const isLandscape = sec.orientation === 'landscape';
+        const pageW = isLandscape ? '841.9pt' : (sec.pageSize === 'legal' ? '612.0pt' : '595.3pt');
+        const pageH = isLandscape ? '595.3pt' : (sec.pageSize === 'legal' ? '1008.0pt' : '841.9pt');
+        const mTop = (((sec.margins && sec.margins.top) != null ? sec.margins.top : 0.5) * 72).toFixed(1) + 'pt';
+        const mRight = (((sec.margins && sec.margins.right) != null ? sec.margins.right : 0.5) * 72).toFixed(1) + 'pt';
+        const mBottom = (((sec.margins && sec.margins.bottom) != null ? sec.margins.bottom : 0.5) * 72).toFixed(1) + 'pt';
+        const mLeft = (((sec.margins && sec.margins.left) != null ? sec.margins.left : 0.5) * 72).toFixed(1) + 'pt';
+        const orientCss = isLandscape ? '\tmso-page-orientation:landscape;\n' : '';
+        const colCss = (sec.cols === 2)
+          ? `\tmso-columns:2 even ${sec.colGap || '0.2in'};\n`
+          : '';
+        const sepCss = (sec.cols === 2 && sec.hasSeparator)
+          ? '\tmso-column-separator:solid;\n'
+          : '';
+
+        pageStyles.push(` @page Section${sNum}
+\t{size:${pageW} ${pageH};
+${orientCss}\tmargin:${mTop} ${mRight} ${mBottom} ${mLeft};
+\tmso-header-margin:36.0pt;
+\tmso-footer-margin:36.0pt;
+${colCss}${sepCss}\tmso-paper-source:0;}`);
+
+        divStyles.push(` div.Section${sNum}
+\t{page:Section${sNum};}`);
+      });
+
+      const bodyDivs = pageSections.map((sec, idx) => {
+        const sNum = idx + 1;
+        const breakTag = idx === 0
+          ? ''
+          : (sec.isContinuous
+              ? "<br clear=all style='page-break-before:auto;mso-break-type:section-break'>\n"
+              : "<br clear=all style='page-break-before:always;mso-break-type:section-break'>\n");
+        const colBreakTag = sec.startWithColumnBreak
+          ? "<br clear=all style='mso-column-break-before:always'>\n"
+          : "";
+        const stamp = (idx === 0 && stampGapHtml) ? stampGapHtml : '';
+        return `${breakTag}<div class="Section${sNum}">\n${stamp}${colBreakTag}${sec.html}\n</div>`;
+      }).join('\n');
 
       return `<!DOCTYPE html>
 <html xmlns:v="urn:schemas-microsoft-com:vml"
@@ -474,7 +762,7 @@
  <o:DocumentProperties>
   <o:Author>Fayzar Computer</o:Author>
   <o:Company>Fayzar Computer & Photostat</o:Company>
-  <o:Title>${meta.title || meta.exam || 'Document'}</o:Title>
+  <o:Title>${meta && (meta.title || meta.exam) ? (meta.title || meta.exam) : 'Document'}</o:Title>
   <o:Created>${new Date().toISOString()}</o:Created>
  </o:DocumentProperties>
  <w:WordDocument>
@@ -498,24 +786,35 @@
    font-family: "${fontFamily}";
    mso-font-alt: "Arial";
  }
- @page Section1 {
-   size: ${pageW} ${pageH};
-   margin: ${mTop} ${mRight} ${mBottom} ${mLeft};
-   mso-header-margin: 36.0pt;
-   mso-footer-margin: 36.0pt;
-   mso-paper-source: 0;
+ p.MsoNormal, li.MsoNormal, div.MsoNormal {
+   mso-style-parent: "";
+   margin: 0in;
+   margin-bottom: .0001pt;
+   mso-pagination: widow-orphan;
+   font-size: 12.0pt;
+   font-family: "${fontFamily}", Arial, sans-serif;
+   mso-ascii-font-family: "${fontFamily}";
+   mso-hansi-font-family: "${fontFamily}";
+   mso-bidi-font-family: "${fontFamily}";
  }
- div.Section1 {
-   page: Section1;
+ table.MsoNormalTable {
+   border-collapse: collapse;
+   mso-table-layout-alt: fixed;
  }
+${pageStyles.join('\n')}
+${divStyles.join('\n')}
  body {
    font-family: "${fontFamily}", "Times New Roman", Arial, sans-serif;
-   font-size: 11.0pt;
+   font-size: 12.0pt;
    color: #000000;
    background: #ffffff;
  }
  p, div, td, th {
-   font-family: "${fontFamily}", "Times New Roman", Arial, sans-serif;
+   font-family: "${fontFamily}", Arial, sans-serif;
+   font-size: 12.0pt;
+   mso-ascii-font-family: "${fontFamily}";
+   mso-hansi-font-family: "${fontFamily}";
+   mso-bidi-font-family: "${fontFamily}";
  }
  table {
    border-collapse: collapse;
@@ -525,11 +824,7 @@
 </style>
 </head>
 <body lang="BN">
-<div class="Section1">
-  ${stampGapHtml}
-  ${headerHtml}
-  ${bodyHtml}
-</div>
+${bodyDivs}
 </body>
 </html>`;
     }

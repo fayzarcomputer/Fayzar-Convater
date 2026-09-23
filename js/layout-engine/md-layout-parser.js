@@ -29,7 +29,7 @@
       const metadata = Object.assign({}, frontmatter, defaultOptions);
 
       // 1b. Detect Document & Question Archetype so rules never get confused
-      const profile = MdLayoutParser.detectDocumentProfile(body || markdownText);
+      const profile = MdLayoutParser.detectDocumentProfile(markdownText);
 
       // 2. Determine template / layout settings
       const templateId = (profile.hasCombinedSections || profile.archetypeId === 'bengali_combined_exam_paper')
@@ -38,11 +38,12 @@
       const templates = global.LAYOUT_TEMPLATES || {};
       const templateDef = templates[templateId] || templates['question-2col'] || {};
 
+      const isCqProfile = profile.archetypeId === 'bengali_cq_paper' || templateId === 'bengali-cq-paper' || templateId === 'bengali_cq_paper';
       const layoutSettings = {
         templateId: templateId,
-        columns: (templateId === 'bengali_combined_exam_paper') ? 1 : parseInt(metadata.columns || templateDef.columns || profile.columns || 1, 10),
+        columns: (templateId === 'bengali_combined_exam_paper') ? 1 : (isCqProfile ? 2 : parseInt(metadata.columns || templateDef.columns || profile.columns || 1, 10)),
         pageSize: (metadata.pageSize || templateDef.pageSize || 'a4').toLowerCase(),
-        orientation: (metadata.orientation || templateDef.orientation || 'portrait').toLowerCase(),
+        orientation: (metadata.orientation || templateDef.orientation || (isCqProfile ? 'landscape' : 'portrait')).toLowerCase(),
         margins: Object.assign({}, templateDef.margins || { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 }, metadata.margins || {}),
         stampMarginInches: parseFloat(metadata.stampMarginInches || (profile.stampMarginInches || (templateId === 'legal-deed' ? 4.0 : 0))),
         profile: profile
@@ -82,6 +83,137 @@
       const bnCharCount = (text.match(/[\u0980-\u09FF]/g) || []).length;
       const totalLetterCount = (text.match(/[a-zA-Z\u0980-\u09FF]/g) || []).length;
       const isPureEnglish = (totalLetterCount > 20 && (bnCharCount / totalLetterCount) < 0.05);
+
+      // 0. EXPLICIT VISION AI LAYOUT TAGS (Highest Priority - Direct Vision AI Classification)
+      const layoutTagMatch = text.match(/\[LAYOUT:\s*([A-Za-z0-9_\-]+)\]/i);
+      if (layoutTagMatch) {
+        const tag = layoutTagMatch[1].toUpperCase();
+        if (tag === 'COMBINED_EXAM' || tag === 'BENGALI_COMBINED_EXAM') {
+          return {
+            archetypeId: 'bengali_combined_exam_paper',
+            name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
+            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: COMBINED_EXAM]',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '।',
+            hangingIndentDxa: 432,
+            subIndentDxa: 864,
+            columns: 1,
+            hasCombinedSections: true,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'CQ_BOOKLET' || tag === 'BENGALI_CQ_PAPER') {
+          // If document also contains MCQ, it is COMBINED!
+          const hasMcqInText = /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(text);
+          if (hasMcqInText) {
+            return {
+              archetypeId: 'bengali_combined_exam_paper',
+              name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
+              reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: CQ_BOOKLET] কিন্তু নথিতে বহুনির্বাচনী অংশ বিদ্যমান',
+              isPureEnglish: isPureEnglish,
+              fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+              numberingDelimiter: '।',
+              hangingIndentDxa: 432,
+              subIndentDxa: 864,
+              columns: 1,
+              hasCombinedSections: true,
+              tableStyle: 'plain_compact',
+              stripAuditNotes: true
+            };
+          }
+          return {
+            archetypeId: 'bengali_cq_paper',
+            name: 'বাংলা সৃজনশীল প্রশ্নপত্র (CQ)',
+            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: CQ_BOOKLET]',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '।',
+            hangingIndentDxa: 432,
+            subIndentDxa: 864,
+            columns: 2,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'MCQ_2COL' || tag === 'BENGALI_MCQ_PAPER') {
+          return {
+            archetypeId: 'bengali_mcq_paper',
+            name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
+            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: MCQ_2COL]',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '।',
+            hangingIndentDxa: 360,
+            subIndentDxa: 0,
+            columns: 2,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'MATH_SCIENCE') {
+          return {
+            archetypeId: 'math_science_paper',
+            name: 'গণিত ও বিজ্ঞান প্রশ্নপত্র',
+            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: MATH_SCIENCE]',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '।',
+            hangingIndentDxa: 432,
+            subIndentDxa: 864,
+            columns: 2,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'OFFICIAL_NOTICE') {
+          return {
+            archetypeId: 'official_notice_memo',
+            name: 'অফিসিয়াল নোটিশ ও মেমোরেন্ডাম',
+            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: OFFICIAL_NOTICE]',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '.',
+            hangingIndentDxa: 0,
+            subIndentDxa: 360,
+            columns: 1,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'APPLICATION_LETTER' || tag === 'GENERAL_DOC') {
+          return {
+            archetypeId: 'single_column_standard_document',
+            name: 'এক-কলাম সাধারণ ডকুমেন্ট / আবেদনপত্র',
+            reason: `Gemini Vision লেআউট ট্যাগ [LAYOUT: ${tag}]`,
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '.',
+            hangingIndentDxa: 0,
+            subIndentDxa: 360,
+            columns: 1,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        if (tag === 'LEGAL_DEED') {
+          return {
+            archetypeId: 'legal_deed_contract',
+            name: 'আইনি দলিল ও চুক্তিপত্র',
+            reason: 'Gemini Vision লেআউট ট্যাগ [LAYOUT: LEGAL_DEED]',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '.',
+            hangingIndentDxa: 0,
+            subIndentDxa: 360,
+            columns: 1,
+            stampMarginInches: 3.5,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+      }
 
       // ARCHETYPE 1: English Language Exam Paper
       if (isPureEnglish && /(?:Time:\s*\d|Full Marks:|Part-[A-Z]|Grammar|Composition|Rewrite|Fill in the blanks|Make sentences|Answer the question|Question)/i.test(text)) {
@@ -136,10 +268,10 @@
       }
 
       // ARCHETYPE 4: Combined Bengali Exam Paper (CQ + MCQ in one document)
-      const hasCqMarkers = /(?:ক-বিভাগ|খ-বিভাগ|গ-বিভাগ|ঘ-বিভাগ|গদ্য|কবিতা|সৃজনশীল|উদ্দীপক)/i.test(text) ||
-        (/(?:^|\n)\s*ক[\.।][^\n]+\n\s*খ[\.।][^\n]+\n\s*গ[\.।]/m.test(text)) ||
-        (/---SECTION_BREAK/i.test(text));
-      const hasMcqMarkers = /(?:বহুনির্বাচনী|নৈর্ব্যক্তিক|সঠিক উত্তর)/i.test(text) || /(?:\(ক\)[^\n]+\(খ\)|ক\.[^\n]+খ\.)/m.test(text);
+      const hasExplicitCqKeyword = /(?:ক-বিভাগ|খ-বিভাগ|গ-বিভাগ|ঘ-বিভাগ|গদ্য|কবিতা|সৃজনশীল|উদ্দীপক|দৃশ্যকল্প)/i.test(text) || (/---SECTION_BREAK/i.test(text));
+      const hasCqSubQuestionsWithMarks = /(?:^|\n)\s*(?:\([কa]\)|[কa][\.।])[^\n]+\[[১1]\][\s\S]*?(?:^|\n)\s*(?:\([খb]\)|[খb][\.।])[^\n]+\[[২2]\]/m.test(text);
+      const hasCqMarkers = hasExplicitCqKeyword || hasCqSubQuestionsWithMarks;
+      const hasMcqMarkers = /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|সঠিক উত্তর)/i.test(text) || /(?:\(ক\)[^\n]+\(খ\)|ক\.[^\n]+খ\.)/m.test(text);
 
       if (hasCqMarkers && hasMcqMarkers) {
         return {
@@ -159,7 +291,7 @@
       }
 
       // ARCHETYPE 5: Multiple Choice Questions (MCQ)
-      if (/(?:\(ক\)[^\n]+\(খ\)|ক\.[^\n]+খ\.)/m.test(text) || /(?:বহুনির্বাচনী|সঠিক উত্তর|১টি করে উত্তর)/i.test(text)) {
+      if (/(?:\(ক\)[^\n]+\(খ\)|ক\.[^\n]+খ\.)/m.test(text) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|সঠিক উত্তর|১টি করে উত্তর)/i.test(text)) {
         return {
           archetypeId: 'bengali_mcq_paper',
           name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
@@ -249,6 +381,13 @@
         }
       }
 
+      // Explicit Vision Layout Tag extraction & clean stripping from body
+      const tagMatch = body.match(/^\s*\[LAYOUT:\s*([A-Za-z0-9_\-]+)\]\s*[\r\n]?/im);
+      if (tagMatch) {
+        frontmatter.layoutTag = tagMatch[1].toUpperCase();
+        body = body.replace(/^\s*\[LAYOUT:\s*[A-Za-z0-9_\-]+\]\s*[\r\n]?/im, '').trim();
+      }
+
       // Smart Header Extractor: If institute is missing, extract from the start of body
       if (!frontmatter.institute) {
         const extracted = MdLayoutParser.extractHeaderFromPlainText(body);
@@ -279,7 +418,7 @@
 
         if (inHeader) {
           // Stop header extraction if first question, heading, or category division begins
-          if (/^[১-৯1-9]+[।\.\)]\s/.test(line) || /^#{1,6}\s/.test(line) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(line) || /^Part\s*[-–—:]/i.test(line)) {
+          if (/^[০-৯0-9]+[।\.\)]\s/.test(line) || /^#{1,6}\s/.test(line) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(line) || /^Part\s*[-–—:]/i.test(line)) {
             inHeader = false;
             bodyLines.push(line);
             continue;
@@ -375,15 +514,21 @@
           continue;
         }
 
-        // Section Break for MCQ or multi-layout (e.g., ---SECTION_BREAK:MCQ--- or ---SECTION_BREAK---)
-        if (/^---(?:SECTION_BREAK(?::[A-Za-z0-9_\-]+)?|MCQ_SECTION)---$/i.test(line)) {
-          i++;
+        // Section Break for MCQ or multi-layout (e.g., ---SECTION_BREAK:MCQ--- or ---SECTION_BREAK--- or natural Bengali MCQ header)
+        const isExplicitSectionBreak = /^---(?:SECTION_BREAK(?::[A-Za-z0-9_\-]+)?|MCQ_SECTION)---$/i.test(line);
+        const isMcqSectionStartLine = !isInMcqSection && /^(?:#{1,6}\s*)?(?:(?:ক|খ|গ|ঘ|ঙ|চ)\s*[-–—:]\s*)?(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)(?:\s*(?:প্রশ্ন|অভীক্ষা|অংশ|বিভাগ))?/i.test(line);
+
+        if (isExplicitSectionBreak || isMcqSectionStartLine) {
           isInMcqSection = true;
           const mcqHeader = {};
+          if (isMcqSectionStartLine) {
+            mcqHeader.title = line.replace(/^#{1,6}\s+/, '').trim();
+          }
+          i++;
           while (i < lines.length) {
             const hLine = lines[i].trim();
             if (!hLine) { i++; continue; }
-            if (/^[১-৯1-9]+[।\.\)]\s/.test(hLine)) break;
+            if (/^[০-৯0-9]+[।\.\)]\s/.test(hLine)) break;
             if (/^#{1,6}\s+(.*)$/.test(hLine)) {
               mcqHeader.title = hLine.replace(/^#{1,6}\s+/, '');
               i++;
@@ -394,14 +539,18 @@
               i++;
               continue;
             }
+            if (!mcqHeader.subHeader && /(?:দিনাজপুর|ঢাকা|চট্টগ্রাম|উপজেলা|জেলা|ফুলবাড়ী|ফুলবাড়ি|রাস্তা|পোস্ট)/i.test(hLine)) {
+              mcqHeader.subHeader = hLine;
+              i++;
+              continue;
+            }
             if (!mcqHeader.exam && /(?:পরীক্ষা|সেমিস্টার|মূল্যায়ন|Exam)/i.test(hLine)) {
               mcqHeader.exam = hLine;
               i++;
               continue;
             }
-            if (!mcqHeader.subjectCode && /(?:বিষয়\s*কোড|Subject\s*Code)\s*[:\-]?\s*([০-৯0-9]+)/i.test(hLine)) {
-              const m = hLine.match(/(?:বিষয়\s*কোড|Subject\s*Code)\s*[:\-]?\s*([০-৯0-9]+)/i);
-              mcqHeader.subjectCode = m[1];
+            if (!mcqHeader.subjectCode && /(?:বিষয়\s*কোড|Subject\s*Code)/i.test(hLine)) {
+              mcqHeader.subjectCode = hLine;
               i++;
               continue;
             }
@@ -425,7 +574,12 @@
               i++;
               continue;
             }
-            break;
+            if (!mcqHeader.subHeader) {
+              mcqHeader.subHeader = hLine;
+            } else {
+              mcqHeader.note = (mcqHeader.note ? mcqHeader.note + ' ' : '') + hLine;
+            }
+            i++;
           }
           blocks.push({
             type: 'section_break',
@@ -479,8 +633,8 @@
         // Blockquote / Stimulus Box (> ...)
         if (line.startsWith('>')) {
           const quoteLines = [];
-          while (i < lines.length && (lines[i].trim().startsWith('>') || (lines[i].trim() && !lines[i].trim().startsWith('#') && !lines[i].trim().match(/^[১-৯1-9][।\.]/)))) {
-            quoteLines.push(lines[i].replace(/^>\s?/, ''));
+          while (i < lines.length && lines[i].trim().startsWith('>')) {
+            quoteLines.push(lines[i].trim().replace(/^>\s?/, ''));
             i++;
           }
           blocks.push({
@@ -505,18 +659,18 @@
         }
 
         // Question Item (1., 1।, 1|, 1), 1-, 1: or ১., ১।, ১|)
-        const questionMatch = line.match(/^([১-৯1-9]+)\s*([।\.\|\)\:\-])\s*(.*)$/);
+        const questionMatch = line.match(/^([০-৯0-9]+)\s*([।\.\|\)\:\-])\s*(.*)$/);
         if (questionMatch) {
           const qNum = questionMatch[1];
           const rawDelim = questionMatch[2];
           let qText = questionMatch[3];
           let qMarks = '';
 
-          // Extract right-aligned marks [0.5x10=5], [1x5=5], [১০], [১] at end of line
-          const marksMatch = qText.match(/\[([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+)\]\s*$/);
+          // Extract right-aligned marks [0.5x10=5], [1x5=5], [১০], [১] at end of line (allowing spaces)
+          const marksMatch = qText.match(/\s*\[\s*([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+?)\s*\]\s*$/);
           if (marksMatch) {
-            qMarks = marksMatch[1];
-            qText = qText.replace(/\[[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\]\s*$/, '').trim();
+            qMarks = marksMatch[1].trim();
+            qText = qText.replace(/\s*\[\s*[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\s*\]\s*$/, '').trim();
           }
 
           const questionBlock = {
@@ -527,6 +681,31 @@
             marks: qMarks,
             subQuestions: []
           };
+
+          // If qText starts with an inline sub-question (e.g. ১২। ক. ... or 9. (a) ...)
+          const inlineSubMatch = qText.match(/^(\([ক-ঘa-divx0-9০-৯]+\)|[ক-ঘa-divx০-৯][\.\)]|[a-d][\.\)])\s*(.*)$/i);
+          if (inlineSubMatch) {
+            const inlineSubId = inlineSubMatch[1];
+            let inlineSubText = inlineSubMatch[2];
+            let inlineSubMarks = qMarks;
+
+            const sMarksMatch = inlineSubText.match(/\s*\[\s*([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+?)\s*\]\s*$/)
+              || inlineSubText.match(/(?:\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
+            if (sMarksMatch) {
+              inlineSubMarks = sMarksMatch[1].trim();
+              inlineSubText = inlineSubText.replace(/\s*\[\s*[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\s*\]\s*$/, '')
+                .replace(/(?:\t|\s{2,})[০-৯0-9]{1,2}\s*$/, '').trim();
+            }
+
+            questionBlock.text = '';
+            questionBlock.marks = '';
+            questionBlock.subQuestions.push({
+              subId: inlineSubId,
+              text: inlineSubText,
+              marks: inlineSubMarks,
+              isMcqOptionsRow: false
+            });
+          }
 
           i++;
 
@@ -539,22 +718,22 @@
             }
 
             // If a new main question, section heading, or section break begins, stop processing this question immediately!
-            if (/^[১-৯1-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine)) {
+            if (/^[০-৯0-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine)) {
               break;
             }
 
-            // Sub-question match: (ক), (খ), (গ), (ঘ) or ক., খ., গ. or (a), (b), (c) or a., b., c. or i., ii., iii., iv. or (1), (2)
-            const subMatch = subLine.match(/^(\([ক-ঘa-divx0-9]+\)|[ক-ঘa-divx][\.\)]|[a-d][\.\)])\s*(.*)$/i);
+            // Sub-question match: (ক), (খ), (গ), (ঘ) or ক., খ., গ. or (a), (b), (c) or a., b., c. or i., ii., iii., iv. or (1), (2) or (১), (২)
+            const subMatch = subLine.match(/^(\([ক-ঘa-divx0-9০-৯]+\)|[ক-ঘa-divx০-৯][\.\)]|[a-d][\.\)])\s*(.*)$/i);
             if (subMatch) {
               const subId = subMatch[1];
               let subText = subMatch[2];
               let subMarks = '';
 
-              const subMarksMatch = subText.match(/\[([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+)\]\s*$/)
+              const subMarksMatch = subText.match(/\s*\[\s*([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+?)\s*\]\s*$/)
                 || subText.match(/(?:\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
               if (subMarksMatch) {
-                subMarks = subMarksMatch[1];
-                subText = subText.replace(/\[[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\]\s*$/, '')
+                subMarks = subMarksMatch[1].trim();
+                subText = subText.replace(/\s*\[\s*[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\s*\]\s*$/, '')
                   .replace(/(?:\t|\s{2,})[০-৯0-9]{1,2}\s*$/, '').trim();
               }
 
@@ -597,21 +776,19 @@
             }
 
             // Multi-line stimulus / poem absorption:
-            // If we have not encountered sub-questions yet, any following lines before sub-questions
-            // (unless next question, section heading, hr, or table begins) are part of the stimulus/poem!
-            if (questionBlock.subQuestions.length === 0) {
-              if (/^[১-৯1-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^(\-{3,}|\={3,}|\*{3,})$/.test(subLine) || subLine.startsWith('|') || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine)) {
-                break;
-              }
-              const cleanStimLine = subLine.replace(/^>\s?/, '');
-              questionBlock.stimulus = questionBlock.stimulus
-                ? (questionBlock.stimulus + '\n' + cleanStimLine)
-                : cleanStimLine;
-              i++;
-              continue;
+            // If the line doesn't match any sub-question pattern but is part of the question block
+            if (/^[০-৯0-9]+[।\.\)]\s/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^(\-{3,}|\={3,}|\*{3,})$/.test(subLine) || subLine.startsWith('|') || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine)) {
+              break;
             }
-
-            break;
+            const cleanStimLine = subLine.replace(/^>\s?/, '');
+            
+            // If a sub-question already exists, this could be stimulus placed AFTER a sub-question (allowed in CQ)
+            // We append it to the main stimulus block.
+            questionBlock.stimulus = questionBlock.stimulus
+              ? (questionBlock.stimulus + '\n' + cleanStimLine)
+              : cleanStimLine;
+            i++;
+            continue;
           }
 
           blocks.push(questionBlock);
@@ -634,10 +811,10 @@
         }
 
         // Ordered List (1. or ১.)
-        if (/^([১-৯1-9]+)[\.\)]\s+(.*)$/.test(line) && !line.includes('।')) {
+        if (/^([০-৯0-9]+)[\.\)]\s+(.*)$/.test(line) && !line.includes('।')) {
           const listItems = [];
-          while (i < lines.length && /^([১-৯1-9]+)[\.\)]\s+(.*)$/.test(lines[i].trim())) {
-            const m = lines[i].trim().match(/^([১-৯1-9]+)[\.\)]\s+(.*)$/);
+          while (i < lines.length && /^([০-৯0-9]+)[\.\)]\s+(.*)$/.test(lines[i].trim())) {
+            const m = lines[i].trim().match(/^([০-৯0-9]+)[\.\)]\s+(.*)$/);
             listItems.push({ number: m[1], text: m[2] });
             i++;
           }
