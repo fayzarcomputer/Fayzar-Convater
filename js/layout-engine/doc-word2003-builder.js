@@ -367,25 +367,29 @@
       const hasMarks = subQuestions.some(s => s.marks && String(s.marks).trim().length > 0);
       if (hasMarks) return null;
 
-      // If any subquestion ends in '?' or contains question words, it is a real question, NOT an MCQ option choice!
-      const hasQuestionSentences = subQuestions.some(s => {
+      // Filter out Roman numeral statements (i., ii., iii., iv.) and prompt text from option evaluation
+      const optionCandidates = subQuestions.filter(s =>
+        !s.isPromptText &&
+        !/^(?:[iIvVxX]+|\([iIvVxX]+\))[\.\)]/i.test((s.subId || '').trim())
+      );
+      if (optionCandidates.length === 0) return null;
+
+      // If any candidate ends in '?' or contains question words, it is a real question, NOT an MCQ option choice!
+      const hasQuestionSentences = optionCandidates.some(s => {
         const t = (s.text || '').trim();
+        if (s.isPromptText || /(?:নিচের\s+কোনটি\s+সঠিক|সঠিক\s+উত্তর)/i.test(t)) return false;
         return t.endsWith('?') || t.endsWith('?।') || (t.length > 40 && (t.includes('কী') || t.includes('কি') || t.includes('কেন') || t.includes('কোথায়') || t.includes('কাকে বলে') || t.includes('ব্যাখ্যা কর') || t.includes('আলোচনা কর')));
       });
       if (hasQuestionSentences) return null;
 
       // If there are subquestions beyond 'ঘ' (e.g. ঙ, চ, ছ or e, f, g), it's a list of questions, not 4-choice MCQ!
-      const hasExtendedSubQuestions = subQuestions.some(s => /^(?:\([ঙ-হe-z]\)|[ঙ-হe-z][\.\)])/i.test((s.subId || '').trim()));
+      const hasExtendedSubQuestions = optionCandidates.some(s => /^(?:\([ঙ-হe-z]\)|[ঙ-হe-z][\.\)])/i.test((s.subId || '').trim()));
       if (hasExtendedSubQuestions) return null;
-
-      // Check average length of items: MCQ options are short answers (average <= 45 chars)
-      const avgLen = subQuestions.reduce((sum, s) => sum + (s.text || '').trim().length, 0) / subQuestions.length;
-      if (avgLen > 45) return null;
 
       const pattern = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/gi;
 
       // Case 1: Check distinct subQuestions representing options (handling isMcqOptionsRow)
-      const optionSubs = subQuestions.filter(s =>
+      const optionSubs = optionCandidates.filter(s =>
         /^(?:\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((s.subId || '').trim()) ||
         (s.isMcqOptionsRow && /^(?:\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((s.text || '').trim()))
       );
@@ -397,7 +401,7 @@
       }
 
       // Case 2: embedded options in 1 or more rows containing (ক)...(খ)...(গ)...(ঘ)
-      const fullText = subQuestions.map(s => (s.subId ? s.subId + ' ' : '') + s.text).join(' ');
+      const fullText = optionCandidates.map(s => (s.subId ? s.subId + ' ' : '') + s.text).join(' ');
       const matches = [...fullText.matchAll(pattern)];
       if (matches.length >= 4) {
         const optMatches = matches.length === 4 ? matches : matches.slice(-4);
@@ -415,7 +419,7 @@
       }
 
       // Case 3: Check isMcqOptionsRow flag fallback
-      const mcqRows = subQuestions.filter(s => s.isMcqOptionsRow && !s.isPromptText);
+      const mcqRows = optionCandidates.filter(s => s.isMcqOptionsRow && !s.isPromptText);
       if (mcqRows.length >= 4) {
         return mcqRows.slice(0, 4).map(s => ({
           label: s.subId || '',

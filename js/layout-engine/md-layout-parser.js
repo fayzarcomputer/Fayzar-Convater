@@ -982,7 +982,7 @@
           };
 
           // If qText starts with an inline sub-question (e.g. ১২। ক. ... or 9. (a) ...)
-          const inlineSubMatch = qText.match(/^(\([ক-ঘa-divx0-9০-৯]+\)|[ক-ঘa-divx০-৯][\.\)]|[a-d][\.\)])\s*(.*)$/i);
+          const inlineSubMatch = qText.match(/^(\([ক-ঘa-z0-9০-৯]+\)|(?:[iIvVxX]+|[ক-ঘa-z0-9০-৯])[\.\)])\s*(.*)$/i);
           if (inlineSubMatch) {
             const inlineSubId = inlineSubMatch[1];
             let inlineSubText = inlineSubMatch[2];
@@ -1025,16 +1025,23 @@
 
             // Boundary defense: If this question already has subquestions and another 'ক' or 'a' appears, break to avoid absorbing next question
             if (questionBlock.subQuestions && questionBlock.subQuestions.length > 0 && /^(\([কa]\)|[কa][\.\)])/i.test(subLine)) {
-              break;
+              // Exception: If existing subQuestions are ONLY Roman numeral statements or prompt text (e.g. i., ii., iii., 'নিচের কোনটি সঠিক?'),
+              // then 'ক.' or 'a.' is the MCQ option choices line for this same question! Do NOT break!
+              const hasOnlyRomanOrPrompt = questionBlock.subQuestions.every(s => 
+                s.isPromptText || /^[iIvVxX]+[\.\)]/i.test(s.subId || '') || /^\([iIvVxX]+\)/i.test(s.subId || '')
+              );
+              if (!hasOnlyRomanOrPrompt) {
+                break;
+              }
             }
 
             // If a new main question, section heading, or section break begins, stop processing this question immediately!
-            if (/^[০-৯0-9]+[।\.\)](?:\s|$)/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine) || /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|ইনস্টিটিউট|School|College)/i.test(subLine)) {
+            if (/^[০-৯0-9]+\s*[।\.\|\)\:\-](?:\s|$)/.test(subLine) || /^#{1,6}\s/.test(subLine) || /^---(?:SECTION_BREAK|MCQ)/i.test(subLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(subLine) || /^Part\s*[-–—:]/i.test(subLine) || /(?:বহুনির্বাচন[ীি]|নৈর্ব্যক্তিক|MCQ)/i.test(subLine) || /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|ইনস্টিটিউট|School|College)/i.test(subLine)) {
               break;
             }
 
             // Sub-question match: (ক), (খ), (গ), (ঘ) or ক., খ., গ. or (a), (b), (c) or a., b., c. or i., ii., iii., iv. or (1), (2) or (১), (২)
-            const subMatch = subLine.match(/^(\([ক-ঘa-divx0-9০-৯]+\)|[ক-ঘa-divx০-৯][\.\)]|[a-d][\.\)])\s*(.*)$/i);
+            const subMatch = subLine.match(/^(\([ক-ঘa-z0-9০-৯]+\)|(?:[iIvVxX]+|[ক-ঘa-z0-9০-৯])[\.\)])\s*(.*)$/i);
             if (subMatch) {
               const subId = subMatch[1];
               let subText = subMatch[2];
@@ -1053,7 +1060,7 @@
               }
 
               const isMcqOptionsRow = /(?:[খ-ঘ][\.\)]|\t)/.test(subText)
-                || /^[iIvVxX]+[\.\)]/.test(subId)
+                || /^[iIvVxX]+[\.\)]/i.test(subId)
                 || (isInMcqSection && !subMarks)
                 || (layoutSettings.profile && layoutSettings.profile.archetypeId === 'bengali_mcq_paper' && !subMarks);
 

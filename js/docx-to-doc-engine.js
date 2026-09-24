@@ -837,8 +837,9 @@
       }
 
       // Check if run is SutonnyMJ/Bijoy vs English/Math/Unicode
-      const isSutonnyRun = opts.direction === 'all_bijoy' || 
-        (fontFamily && (fontFamily.includes('Sutonny') || fontFamily.includes('Bijoy') || fontFamily.includes('Bangla')));
+      const isEnglishFont = fontFamily && /times|calibri|arial|verdana|courier|georgia|cambria/i.test(fontFamily);
+      const isSutonnyFont = fontFamily && (fontFamily.includes('Sutonny') || fontFamily.includes('Bijoy') || fontFamily.includes('Bangla'));
+      const isSutonnyRun = (opts.direction === 'all_bijoy' && !isEnglishFont) || isSutonnyFont;
 
       const effectiveAsciiFont = isSutonnyRun ? 'SutonnyMJ' : (fontFamily || 'Times New Roman');
       const effectiveBidiFont = isSutonnyRun ? 'SutonnyMJ' : (fontFamily || 'Kalpurush');
@@ -846,15 +847,17 @@
       // Check for Drawings / Images inside Run (both DrawingML and VML)
       const imagesHtml = this._extractImagesFromNode(rNode, mediaMap);
 
-      // Check if SutonnyMJ run contains hyphens/dashes - if so, isolate them to Times New Roman
-      if (isSutonnyRun && /[-–—−‒―]/.test(textContent)) {
-        const dParts = textContent.split(/([-–—−‒―]+)/);
+      // Check if SutonnyMJ run contains hyphens/dashes or Roman numerals - if so, isolate them to Times New Roman
+      const hasDash = /[-–—−‒―]/.test(textContent);
+      const hasRoman = /\b(?:i{1,3}|iv|v|vi{0,3}|ix|x)\b/i.test(textContent);
+      if (isSutonnyRun && (hasDash || hasRoman)) {
+        const dParts = textContent.split(/([-–—−‒―]+|\b(?:i{1,3}|iv|v|vi{0,3}|ix|x)\b)/i);
         let splitHtml = imagesHtml;
         for (let dp of dParts) {
           if (!dp) continue;
-          const isDash = /[-–—−‒―]/.test(dp);
-          const fAscii = isDash ? 'Times New Roman' : 'SutonnyMJ';
-          const fBidi = isDash ? 'Times New Roman' : 'SutonnyMJ';
+          const isTimes = /[-–—−‒―]/.test(dp) || /^(?:i{1,3}|iv|v|vi{0,3}|ix|x)$/i.test(dp);
+          const fAscii = isTimes ? 'Times New Roman' : 'SutonnyMJ';
+          const fBidi = isTimes ? 'Times New Roman' : 'SutonnyMJ';
           const partStyles = [
             `font-family:'${fAscii}',Arial,sans-serif`,
             `mso-ascii-font-family:'${fAscii}'`,
@@ -866,7 +869,7 @@
           if (isUnderline) partStyles.push(`text-decoration:underline`);
           const escDp = this._escapeHtml(dp);
           const fmtDp = this._renderMsoSpaces(escDp);
-          if (isDash) {
+          if (isTimes) {
             splitHtml += `<span lang="EN-US" style="${partStyles.join(';')}">${fmtDp}</span>`;
           } else {
             splitHtml += `<span style="${partStyles.join(';')}">${fmtDp}</span>`;

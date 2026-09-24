@@ -3255,24 +3255,16 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
       return;
     }
 
-    // FORMAT 3: Word 2003 .DOC (Direct Full-Fidelity Word 2003 SutonnyMJ Document)
+    // FORMAT 3: Word 2003 .DOC (Direct Full-Fidelity Word 2003 SutonnyMJ Document via Core Master Pipeline)
     if (format === 'doc') {
       showToast(`ওয়ার্ড ২০০৩ (.doc) ফাইল প্রস্তুত হচ্ছে...`, 'info');
       try {
         let docBlob = null;
-        if (typeof MdLayoutParser !== 'undefined' && typeof DocWord2003Builder !== 'undefined') {
-          const detectFn = (t) => {
-            if (typeof MdLayoutParser.detectDocumentProfile === 'function') {
-              const prof = MdLayoutParser.detectDocumentProfile(t);
-              if (prof?.archetypeId) return prof.archetypeId;
-            }
-            return 'question-2col';
-          };
-          const detectedLayout = detectFn(text);
-          const ast = MdLayoutParser.parse(text, { layout: detectedLayout, pageSize: pageSizeVal, margin: marginVal, fontSize: fontSizeVal });
-          docBlob = DocWord2003Builder.build(ast, { font: 'SutonnyMJ' });
-        } else if (typeof DocxHandler !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
-          // ধাপ ১: মাস্টার ইউনিকোড docx কে DocxHandler দিয়ে সুতন্নিএমজে docx এ কনভার্ট
+
+        // মূল পরীক্ষিত পাইপলাইন (১ম অগ্রাধিকার):
+        // মাস্টার ইউনিকোড DOCX -> DocxHandler (ইউনিকোড টু বিজয়) -> DocxToDocConverter (.doc)
+        if (masterDocxBlob && typeof DocxHandler !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
+          // ধাপ ১: মাস্টার ইউনিকোড docx কে DocxHandler ও BanglaConverterEngine দিয়ে সুতন্নিএমজে docx এ কনভার্ট
           const bijoyDocxRes = await DocxHandler.convertDocx(masterDocxBlob, {
             direction: 'u2b',
             targetFont: 'SutonnyMJ'
@@ -3288,7 +3280,7 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
             optimizeForQuestionPaper: true
           });
           docBlob = docResult.blob || docResult.convertedBlob;
-        } else if (typeof DocxToDocConverter !== 'undefined') {
+        } else if (typeof DocxToDocConverter !== 'undefined' && masterDocxBlob) {
           const docxConverter = new DocxToDocConverter();
           const docResult = await docxConverter.convertDocxToDoc(masterDocxBlob, {
             pageSize: pageSizeVal,
@@ -3297,6 +3289,18 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
             optimizeForQuestionPaper: true
           });
           docBlob = docResult.blob || docResult.convertedBlob;
+        } else if (typeof MdLayoutParser !== 'undefined' && typeof DocWord2003Builder !== 'undefined') {
+          // ফলব্যাক: যদি মাস্টার docx অনুপলব্ধ থাকে
+          const detectFn = (t) => {
+            if (typeof MdLayoutParser.detectDocumentProfile === 'function') {
+              const prof = MdLayoutParser.detectDocumentProfile(t);
+              if (prof?.archetypeId) return prof.archetypeId;
+            }
+            return 'question-2col';
+          };
+          const detectedLayout = detectFn(text);
+          const ast = MdLayoutParser.parse(text, { layout: detectedLayout, pageSize: pageSizeVal, margin: marginVal, fontSize: fontSizeVal });
+          docBlob = DocWord2003Builder.build(ast, { font: 'SutonnyMJ' });
         } else if (typeof DocxHandler !== 'undefined' && typeof DocxHandler.createDocFromText === 'function') {
           docBlob = DocxHandler.createDocFromText(text, 'SutonnyMJ', true, fontSizePt, {
             pageSize: pageSizeVal,
