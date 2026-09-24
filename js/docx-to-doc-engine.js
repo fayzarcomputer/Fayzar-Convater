@@ -580,7 +580,40 @@
                   formattedEq = this._escapeHtml(cleanEq);
                 }
 
-                const fieldHtml = `<!--[if supportFields]><span class="MsoFieldCode" style="font-family:'Times New Roman',serif;"><span style='mso-element:field-begin'></span><span style='mso-spacerun:yes'>&nbsp;</span>EQ ${formattedEq} <span style='mso-element:field-end'></span></span><![endif]-->`;
+                // ── Smart equation rendering ──────────────────────────────────
+                // EQ field code-এ Unicode থাকলে (∩, ∪, ∅, ^c ইত্যাদি) Word "Error!" দেখায়।
+                // তাই:
+                // ১. cleanEq-এ EQ switch (\\F, \\R, \\I) আছে কিনা দেখো → তাহলে EQ field ব্যবহার করো
+                // ২. অন্যথায় → সরাসরি HTML span রেন্ডার করো (সব সময় সঠিক)
+
+                const hasEqSwitches = /\\[FRISBXUA]\b/.test(cleanEq);
+                let fieldHtml;
+
+                if (hasEqSwitches) {
+                  // Complex EQ (fraction, radical etc.) → 5-part Word HTML EQ field
+                  // cleanEq must be ASCII-safe EQ instruction
+                  fieldHtml =
+                    `<span style="font-family:'Times New Roman',serif;font-size:12pt;">` +
+                    `<!--[if supportFields]>` +
+                      `<span style='mso-element:field-begin'></span>` +
+                      ` EQ ${cleanEq} ` +
+                      `<span style='mso-element:field-separator'></span>` +
+                    `<![endif]-->` +
+                    `<span style="font-style:italic;">${formattedEq}</span>` +
+                    `<!--[if supportFields]>` +
+                      `<span style='mso-element:field-end'></span>` +
+                    `<![endif]-->` +
+                    `</span>`;
+                } else {
+                  // Simple symbols, Unicode math, superscripts → direct HTML span
+                  // এটি সর্বদা সঠিকভাবে render করে, "Error!" হওয়ার কোনো সুযোগ নেই
+                  fieldHtml =
+                    `<span style="font-family:'Times New Roman',serif;font-size:12pt;font-style:italic;">` +
+                    `${formattedEq}` +
+                    `</span>`;
+                }
+
+
                 runsHtml.push(fieldHtml);
                 inField = false;
                 fieldCode = "";
