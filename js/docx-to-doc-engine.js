@@ -613,6 +613,40 @@
             textContent += rData.text;
             runCount++;
           }
+        } else if (childName === 'oMath' || childName === 'oMathPara') {
+          // ============================================================
+          // OMML (Office Math Markup Language) → Word HTML EQ field
+          // DocxLayoutBuilder generates <m:oMath> for equations.
+          // Convert to Word-compatible EQ field HTML for .doc output.
+          // ============================================================
+          let mathHtml = '';
+          try {
+            if (typeof EquationConverter !== 'undefined' && typeof EquationConverter.ommlNodeToEqHtml === 'function') {
+              // Preferred: use EquationConverter's OMML-to-EQ converter
+              mathHtml = EquationConverter.ommlNodeToEqHtml(child, 12, true);
+            } else if (typeof EquationConverter !== 'undefined' && typeof EquationConverter.ommlToOpenXmlRuns === 'function') {
+              // Fallback: extract readable math text from OMML node
+              const mathText = (child.textContent || '').replace(/\s+/g, ' ').trim();
+              if (mathText) {
+                mathHtml = `<span style="font-family:'Times New Roman',serif;font-style:italic;">${this._escapeHtml(mathText)}</span>`;
+              }
+            } else {
+              // Last resort: plain text extraction
+              const mathText = (child.textContent || '').replace(/\s+/g, ' ').trim();
+              if (mathText) {
+                mathHtml = `<span style="font-family:'Times New Roman',serif;font-style:italic;">${this._escapeHtml(mathText)}</span>`;
+              }
+            }
+          } catch (e) {
+            const mathText = (child.textContent || '').replace(/\s+/g, ' ').trim();
+            if (mathText) {
+              mathHtml = `<span style="font-family:'Times New Roman',serif;font-style:italic;">${this._escapeHtml(mathText)}</span>`;
+            }
+          }
+          if (mathHtml) {
+            runsHtml.push(mathHtml);
+            runCount++;
+          }
         } else if (childName === 'drawing' || childName === 'pict' || childName === 'shape') {
           const imgs = this._extractImagesFromNode(child, mediaMap);
           if (imgs) {

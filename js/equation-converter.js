@@ -1280,7 +1280,114 @@
 
       return '<m:oMath>' + parseChunk(s) + '</m:oMath>';
     }
+
+    /**
+
+     * Converts an OMML DOM node (m:oMath / m:oMathPara) into Word 2003 HTML
+     * for use inside a .doc output file. Renders visible math text so Word
+     * does NOT show "Error!" instead of equations.
+     *
+     * @param {Element} oMathNode - The <m:oMath> or <m:oMathPara> DOM node
+     * @param {number} fontSize - Font size in pt (default 12)
+     * @param {boolean} isBijoy - true if Bijoy/SutonnyMJ context
+     * @returns {string} Word-compatible HTML string
+     */
+    static ommlNodeToEqHtml(oMathNode, fontSize = 12, isBijoy = true) {
+      if (!oMathNode) return '';
+
+      // ── Recursive OMML text extractor ──────────────────────────────
+      function extractMathText(node) {
+        if (!node) return '';
+        const localName = (node.localName || node.nodeName || '').replace(/^m:/, '');
+
+        // Text run content
+        if (localName === 't' || localName === 'r') {
+          return node.textContent || '';
+        }
+
+        // Fraction: numerator / denominator
+        if (localName === 'f') {
+          const num = node.querySelector ? node.querySelector('[*|localName="num"],[*|localName="fNum"]') : null;
+          const den = node.querySelector ? node.querySelector('[*|localName="den"],[*|localName="fDen"]') : null;
+          const numText = num ? extractMathText(num) : walkChildren(node).split('/')[0] || '';
+          const denText = den ? extractMathText(den) : walkChildren(node).split('/')[1] || '';
+          if (numText && denText) return numText + '/' + denText;
+          return walkChildren(node);
+        }
+
+        // Superscript / Subscript
+        if (localName === 'sSup') {
+          const base = node.querySelector ? node.querySelector('[*|localName="e"]') : null;
+          const sup  = node.querySelector ? node.querySelector('[*|localName="sup"]') : null;
+          const b = base ? extractMathText(base) : '';
+          const s = sup  ? extractMathText(sup)  : '';
+          return b + (s ? '\u207F'.includes(s) ? s : '^' + s : '');
+        }
+        if (localName === 'sSub') {
+          const base = node.querySelector ? node.querySelector('[*|localName="e"]') : null;
+          const sub  = node.querySelector ? node.querySelector('[*|localName="sub"]') : null;
+          const b = base ? extractMathText(base) : '';
+          const s = sub  ? extractMathText(sub)  : '';
+          return b + (s ? '_' + s : '');
+        }
+        if (localName === 'sSubSup') {
+          const base = node.querySelector ? node.querySelector('[*|localName="e"]') : null;
+          const sub  = node.querySelector ? node.querySelector('[*|localName="sub"]') : null;
+          const sup  = node.querySelector ? node.querySelector('[*|localName="sup"]') : null;
+          const b = base ? extractMathText(base) : '';
+          const sb = sub  ? '_' + extractMathText(sub)  : '';
+          const sp = sup  ? '^' + extractMathText(sup)  : '';
+          return b + sb + sp;
+        }
+
+        // Radical (√)
+        if (localName === 'rad') {
+          const deg = node.querySelector ? node.querySelector('[*|localName="deg"]') : null;
+          const e   = node.querySelector ? node.querySelector('[*|localName="e"]')   : null;
+          const degText = deg ? extractMathText(deg).trim() : '';
+          const eText   = e   ? extractMathText(e)          : walkChildren(node);
+          return degText ? degText + '\u221A(' + eText + ')' : '\u221A(' + eText + ')';
+        }
+
+        // Default: walk all children
+        return walkChildren(node);
+      }
+
+      function walkChildren(node) {
+        if (!node || !node.childNodes) return node ? (node.textContent || '') : '';
+        let out = '';
+        for (let i = 0; i < node.childNodes.length; i++) {
+          const ch = node.childNodes[i];
+          if (ch.nodeType === 3) { // text node
+            out += ch.textContent || '';
+          } else {
+            out += extractMathText(ch);
+          }
+        }
+        return out;
+      }
+
+      // ── Extract math text from the OMML node ──────────────────────
+      let mathText = extractMathText(oMathNode).trim();
+
+      // Clean up excess whitespace
+      mathText = mathText.replace(/\s{2,}/g, ' ').trim();
+
+      if (!mathText) return '';
+
+      // ── Escape HTML special chars ──────────────────────────────────
+      const esc = (s) => s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+      // ── Wrap in italic Times New Roman span (standard math style) ─
+      const sz = fontSize || 12;
+      return `<span style="font-family:'Times New Roman',serif;font-size:${sz}pt;font-style:italic;">${esc(mathText)}</span>`;
+    }
   }
+
 
   if (typeof window !== 'undefined') {
     window.EquationConverter = EquationConverter;
