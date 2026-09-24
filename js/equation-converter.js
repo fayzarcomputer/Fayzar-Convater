@@ -794,6 +794,12 @@
       const segments = [];
       if (!text) return segments;
 
+      // Normalize backtick-wrapped math: `$ ... $` -> $ ... $
+      text = text.replace(/`(\$\$[\s\S]*?\$\$|\$[^`\r\n]+?\$)`/g, '$1');
+      text = text.replace(/\$\s*\$\s*([A-Za-z0-9])/g, '$$$1');
+      text = text.replace(/\$([A-Za-z0-9\s=]+)\$\s*\\{/g, '$$$1 \\{');
+      text = text.replace(/`\s*\$/g, '$').replace(/\$\s*`/g, '$');
+
       const regex = /\$\$([\s\S]*?)\$\$|\$([^\$]+?)\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/g;
       let lastIndex = 0;
       let match;
@@ -1107,14 +1113,16 @@
     /**
      * Converts a LaTeX math string to Native Microsoft Word OMML (<m:oMath>) XML string.
      * 100% Native Office Math for Word 2007, 2010, 2013, 2016, 2019, 2021 & Office 365.
-     * Eliminates Equation Editor 3.0 popup, eliminates "Word equation too large to convert" error.
+    /**
+     * Replaces LaTeX math symbols, set theory operators, arrows, brackets, and text wrappers
+     * with clean standard Unicode characters.
      */
-    static latexToOmml(latex, isBijoy = false) {
+    static cleanLatexSymbols(latex) {
       if (!latex) return '';
-      let s = latex.trim();
-      s = s.replace(/^\$\$+|\$\$+$/g, '').replace(/^\\\[|\\\]$/g, '').replace(/^\\\(|\\\)$/g, '').replace(/^\$+|\$+$/g, '').trim();
+      let s = String(latex);
 
       const symMap = [
+        // Greek letters
         [/\\theta\b|\\vartheta\b/g, '\u03B8'],
         [/\\pi\b/g, '\u03C0'],
         [/\\alpha\b/g, '\u03B1'],
@@ -1129,6 +1137,7 @@
         [/\\omega\b/g, '\u03C9'],
         [/\\Delta\b/g, '\u0394'],
         [/\\Omega\b/g, '\u03A9'],
+        // Operators & comparisons
         [/\\pm\b/g, '\u00B1'],
         [/\\mp\b/g, '\u2213'],
         [/\\times\b/g, '\u00D7'],
@@ -1143,6 +1152,7 @@
         [/\\infty\b/g, '\u221E'],
         [/\\degree\b|\\circ\b/g, '\u00B0'],
         [/\\angle\b/g, '\u2220'],
+        // Functions
         [/\\sin\b/g, 'sin '],
         [/\\cos\b/g, 'cos '],
         [/\\tan\b/g, 'tan '],
@@ -1155,13 +1165,64 @@
         [/\\log\b/g, 'log '],
         [/\\ln\b/g, 'ln '],
         [/\\lim\b/g, 'lim '],
+        // Set theory & discrete math
+        [/\\cup\b/g, '\u222A'],
+        [/\\cap\b/g, '\u2229'],
+        [/\\emptyset\b|\\varnothing\b/g, '\u2205'],
+        [/\\setminus\b/g, '\u2216'],
+        [/\\in\b/g, '\u2208'],
+        [/\\notin\b/g, '\u2209'],
+        [/\\subset\b/g, '\u2282'],
+        [/\\supset\b/g, '\u2283'],
+        [/\\subseteq\b/g, '\u2286'],
+        [/\\supseteq\b/g, '\u2287'],
+        [/\\nsubseteq\b/g, '\u2288'],
+        [/\\vee\b|\\lor\b/g, '\u2228'],
+        [/\\wedge\b|\\land\b/g, '\u2227'],
+        [/\\neg\b|\\lnot\b/g, '\u00AC'],
+        [/\\forall\b/g, '\u2200'],
+        [/\\exists\b/g, '\u2203'],
+        [/\\prime\b/g, '\u2032'],
+        // Arrows & geometry
+        [/\\to\b|\\rightarrow\b/g, '\u2192'],
+        [/\\leftarrow\b/g, '\u2190'],
+        [/\\leftrightarrow\b/g, '\u2194'],
+        [/\\Rightarrow\b/g, '\u21D2'],
+        [/\\Leftarrow\b/g, '\u21D0'],
+        [/\\Leftrightarrow\b/g, '\u21D4'],
+        [/\\perp\b/g, '\u22A5'],
+        [/\\parallel\b/g, '\u2225'],
+        [/\\cong\b/g, '\u2245'],
+        [/\\sim\b/g, '~'],
+        [/\\propto\b/g, '\u221D'],
+        // Brackets & delimiters
+        [/\\\{/g, '{'],
+        [/\\\}/g, '}'],
         [/\\left/g, ''],
-        [/\\right/g, '']
+        [/\\right/g, ''],
+        // Spacing & text wrappers
+        [/\\quad\b/g, '  '],
+        [/\\qquad\b/g, '    '],
+        [/\\,|\\;|\\:|\\!/g, ' '],
+        [/\\(?:text|mathrm|textmd|textbf|textit|mbox|mathbf|mathbb)\{([^{}]*)\}/g, '$1']
       ];
 
       for (const [re, rep] of symMap) {
         s = s.replace(re, rep);
       }
+      return s;
+    }
+
+    /**
+     * Converts a LaTeX string directly into Word OpenXML OMML (<m:oMath>).
+     * Eliminates Equation Editor 3.0 popup, eliminates "Word equation too large to convert" error.
+     */
+    static latexToOmml(latex, isBijoy = false) {
+      if (!latex) return '';
+      let s = latex.trim();
+      s = s.replace(/^\$\$+|\$\$+$/g, '').replace(/^\\\[|\\\]$/g, '').replace(/^\\\(|\\\)$/g, '').replace(/^\$+|\$+$/g, '').trim();
+
+      s = EquationConverter.cleanLatexSymbols(s);
 
       function escapeXml(unsafe) {
         return String(unsafe || '')
@@ -1248,6 +1309,7 @@
         let j = 0;
         while (j < tStr.length) {
           if (tStr[j] === '^' || tStr[j] === '_') {
+            // Stray script without base — empty base element
             const isSup = (tStr[j] === '^');
             j++;
             let scriptVal = '';
@@ -1264,20 +1326,63 @@
               scriptVal = tStr[j];
               j++;
             }
-
             if (isSup) {
               res += '<m:sSup><m:e></m:e><m:sup>' + parseChunk(scriptVal) + '</m:sup></m:sSup>';
             } else {
               res += '<m:sSub><m:e></m:e><m:sub>' + parseChunk(scriptVal) + '</m:sub></m:sSub>';
             }
           } else {
+            // Collect plain text until next ^ or _
             let plain = '';
             while (j < tStr.length && tStr[j] !== '^' && tStr[j] !== '_') {
               plain += tStr[j];
               j++;
             }
-            if (plain) {
-              res += '<m:r><m:t xml:space="preserve">' + escapeXml(plain) + '</m:t></m:r>';
+            if (j < tStr.length && (tStr[j] === '^' || tStr[j] === '_')) {
+              // The last character in `plain` is the base for the script
+              const base = plain.slice(-1);
+              const prefix = plain.slice(0, -1);
+              if (prefix) {
+                res += '<m:r><m:t xml:space="preserve">' + escapeXml(prefix) + '</m:t></m:r>';
+              }
+              // Collect consecutive scripts (may have both ^ and _)
+              let supVal = null;
+              let subVal = null;
+              while (j < tStr.length && (tStr[j] === '^' || tStr[j] === '_')) {
+                const isSup2 = (tStr[j] === '^');
+                j++;
+                let sVal = '';
+                if (tStr[j] === '{') {
+                  const matchEnd = findMatchingBrace(tStr, j);
+                  if (matchEnd !== -1) {
+                    sVal = tStr.slice(j + 1, matchEnd);
+                    j = matchEnd + 1;
+                  } else {
+                    sVal = tStr[j] || '';
+                    j++;
+                  }
+                } else if (j < tStr.length) {
+                  sVal = tStr[j];
+                  j++;
+                }
+                if (isSup2) supVal = sVal;
+                else subVal = sVal;
+              }
+              const baseOmml = '<m:e><m:r><m:t xml:space="preserve">' + escapeXml(base) + '</m:t></m:r></m:e>';
+              if (supVal !== null && subVal !== null) {
+                res += '<m:sSubSup>' + baseOmml +
+                  '<m:sub>' + parseChunk(subVal) + '</m:sub>' +
+                  '<m:sup>' + parseChunk(supVal) + '</m:sup>' +
+                  '</m:sSubSup>';
+              } else if (supVal !== null) {
+                res += '<m:sSup>' + baseOmml + '<m:sup>' + parseChunk(supVal) + '</m:sup></m:sSup>';
+              } else if (subVal !== null) {
+                res += '<m:sSub>' + baseOmml + '<m:sub>' + parseChunk(subVal) + '</m:sub></m:sSub>';
+              }
+            } else {
+              if (plain) {
+                res += '<m:r><m:t xml:space="preserve">' + escapeXml(plain) + '</m:t></m:r>';
+              }
             }
           }
         }
