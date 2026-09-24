@@ -2594,6 +2594,36 @@ Output the COMPLETE, FULL document text from start to finish, ending with the ma
     // 3. Clean leading bullet asterisks on numbered lists: * i. -> i., * 1. -> 1.
     text = text.replace(/^[\*\-•]\s*([iIvVxX0-9\u0980-\u09FF]+\.)/gm, '$1');
 
+    // 3-sort. Auto-sort misordered Roman numeral statements in MCQs (e.g. ii., iii., i. -> i., ii., iii.)
+    const getRomanVal = (line) => {
+      const trimmed = line.trim().replace(/^[\t\s]*\*+|\*+$/g, '');
+      const m = trimmed.match(/^(?:[iIvVxX]+|\([iIvVxX]+\))[\.\)]/);
+      if (!m) return 999;
+      const r = m[0].replace(/[\(\)\.\s]/g, '').toLowerCase();
+      const map = { 'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10 };
+      return map[r] || 999;
+    };
+    const rawSplit = text.split('\n');
+    const sortedRomanLines = [];
+    let rIdx = 0;
+    while (rIdx < rawSplit.length) {
+      if (getRomanVal(rawSplit[rIdx]) < 999) {
+        const romanBlock = [];
+        while (rIdx < rawSplit.length && getRomanVal(rawSplit[rIdx]) < 999) {
+          romanBlock.push(rawSplit[rIdx]);
+          rIdx++;
+        }
+        if (romanBlock.length > 1) {
+          romanBlock.sort((a, b) => getRomanVal(a) - getRomanVal(b));
+        }
+        sortedRomanLines.push(...romanBlock);
+      } else {
+        sortedRomanLines.push(rawSplit[rIdx]);
+        rIdx++;
+      }
+    }
+    text = sortedRomanLines.join('\n');
+
     // 3a. Format reaction arrows (\xrightarrow, \rightarrow, etc.) into clean standard symbols
     if (typeof DocxHandler !== 'undefined' && typeof DocxHandler.formatReactionArrows === 'function') {
       text = DocxHandler.formatReactionArrows(text);

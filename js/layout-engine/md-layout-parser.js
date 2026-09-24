@@ -1080,6 +1080,31 @@
             continue;
           }
 
+          // Ensure Roman numeral items (i., ii., iii., iv.) inside the question are sorted in proper ascending order
+          if (questionBlock.subQuestions && questionBlock.subQuestions.length > 1) {
+            const getRomanVal = (subId) => {
+              const m = String(subId || '').trim().match(/^([iIvVxX]+)[\.\)]/);
+              if (!m) return 999;
+              const r = m[1].toLowerCase();
+              const map = { 'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10 };
+              return map[r] || 999;
+            };
+            const rIndices = [];
+            const rItems = [];
+            for (let idx = 0; idx < questionBlock.subQuestions.length; idx++) {
+              if (getRomanVal(questionBlock.subQuestions[idx].subId) < 999) {
+                rIndices.push(idx);
+                rItems.push(questionBlock.subQuestions[idx]);
+              }
+            }
+            if (rItems.length > 1) {
+              rItems.sort((a, b) => getRomanVal(a.subId) - getRomanVal(b.subId));
+              for (let j = 0; j < rIndices.length; j++) {
+                questionBlock.subQuestions[rIndices[j]] = rItems[j];
+              }
+            }
+          }
+
           blocks.push(questionBlock);
           continue;
         }

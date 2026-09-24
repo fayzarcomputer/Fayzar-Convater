@@ -626,21 +626,43 @@
           if (block.subQuestions && block.subQuestions.length > 0) {
             const mcqOptions = DocWord2003Builder.extractMcqOptions(block.subQuestions);
             if (mcqOptions && mcqOptions.length >= 2) {
+              // Defensively sort Roman numeral statements (i., ii., iii.) so i. is always on top
+              const getRomanVal = (subId) => {
+                const m = String(subId || '').trim().match(/^([iIvVxX]+)[\.\)]/);
+                if (!m) return 999;
+                const map = { 'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10 };
+                return map[m[1].toLowerCase()] || 999;
+              };
+              const nonOptionSubs = block.subQuestions.filter(sub => {
+                return !/(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((sub.subId || '') + ' ' + (sub.text || ''));
+              });
+              const rIndices = [];
+              const rItems = [];
+              for (let idx = 0; idx < nonOptionSubs.length; idx++) {
+                if (getRomanVal(nonOptionSubs[idx].subId) < 999) {
+                  rIndices.push(idx);
+                  rItems.push(nonOptionSubs[idx]);
+                }
+              }
+              if (rItems.length > 1) {
+                rItems.sort((a, b) => getRomanVal(a.subId) - getRomanVal(b.subId));
+                for (let j = 0; j < rIndices.length; j++) {
+                  nonOptionSubs[rIndices[j]] = rItems[j];
+                }
+              }
+
               // Extract any non-option prompts (like 'নিচের কোনটি সঠিক?' or Roman numeral statements)
-              for (const sub of block.subQuestions) {
-                const isOptionLine = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((sub.subId || '') + ' ' + (sub.text || ''));
-                if (!isOptionLine) {
-                  if (sub.isPromptText) {
-                    html += `<p class="MsoNormal" style="margin-left:21.6pt;font-weight:bold;margin-bottom:2pt;line-height:normal;font-size:12pt;">${formatMath(sub.text)}</p>`;
-                  } else if (/^(?:[iIvVxX]+|[0-9]+)[\.\)]/.test(sub.subId || '')) {
-                    const isRoman = /^[iIvVxX]+[\.\)]/.test(sub.subId || '');
-                    const rIdHtml = isRoman
-                      ? `<span style="font-family:'Times New Roman',serif;">${sub.subId}</span>`
-                      : `<b>${cvt(sub.subId)}</b>`;
-                    html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:1pt;line-height:normal;font-size:12pt;">${rIdHtml}&nbsp;${formatMath(sub.text)}</p>`;
-                  } else {
-                    html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:1.5pt;line-height:normal;font-size:12pt;">${formatMath((sub.subId ? sub.subId + '&nbsp;' : '') + sub.text)}</p>`;
-                  }
+              for (const sub of nonOptionSubs) {
+                if (sub.isPromptText) {
+                  html += `<p class="MsoNormal" style="margin-left:21.6pt;font-weight:bold;margin-bottom:2pt;line-height:normal;font-size:12pt;">${formatMath(sub.text)}</p>`;
+                } else if (/^(?:[iIvVxX]+|[0-9]+)[\.\)]/.test(sub.subId || '')) {
+                  const isRoman = /^[iIvVxX]+[\.\)]/.test(sub.subId || '');
+                  const rIdHtml = isRoman
+                    ? `<span style="font-family:'Times New Roman',serif;">${sub.subId}</span>`
+                    : `<b>${cvt(sub.subId)}</b>`;
+                  html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:1pt;line-height:normal;font-size:12pt;">${rIdHtml}&nbsp;${formatMath(sub.text)}</p>`;
+                } else {
+                  html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:1.5pt;line-height:normal;font-size:12pt;">${formatMath((sub.subId ? sub.subId + '&nbsp;' : '') + sub.text)}</p>`;
                 }
               }
 

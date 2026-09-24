@@ -938,8 +938,33 @@
           if (block.subQuestions && block.subQuestions.length > 0) {
             const mcqOptions = DocxLayoutBuilder.extractMcqOptions(block.subQuestions);
             if (mcqOptions && mcqOptions.length >= 2) {
+              // Defensively sort Roman numeral statements (i., ii., iii.) so i. is always on top
+              const getRomanVal = (subId) => {
+                const m = String(subId || '').trim().match(/^([iIvVxX]+)[\.\)]/);
+                if (!m) return 999;
+                const map = { 'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10 };
+                return map[m[1].toLowerCase()] || 999;
+              };
+              const nonOptionSubs = block.subQuestions.filter(sub => {
+                return !/(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((sub.subId || '') + ' ' + (sub.text || ''));
+              });
+              const rIndices = [];
+              const rItems = [];
+              for (let idx = 0; idx < nonOptionSubs.length; idx++) {
+                if (getRomanVal(nonOptionSubs[idx].subId) < 999) {
+                  rIndices.push(idx);
+                  rItems.push(nonOptionSubs[idx]);
+                }
+              }
+              if (rItems.length > 1) {
+                rItems.sort((a, b) => getRomanVal(a.subId) - getRomanVal(b.subId));
+                for (let j = 0; j < rIndices.length; j++) {
+                  nonOptionSubs[rIndices[j]] = rItems[j];
+                }
+              }
+
               // Extract any non-option prompts (like 'নিচের কোনটি সঠিক?' or Roman numeral statements)
-              for (const sub of block.subQuestions) {
+              for (const sub of nonOptionSubs) {
                 const isOptionLine = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((sub.subId || '') + ' ' + (sub.text || ''));
                 if (!isOptionLine) {
                   if (sub.isPromptText) {
