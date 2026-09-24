@@ -328,13 +328,17 @@ SPECIFIC DEFECTS YOU MUST AUDIT AND FIX:
    - No empty blank lines or double Enters between consecutive questions or lines.
    - Never output long chains of dots. Keep dotted lines to at most 3 to 6 dots (......) and preserve the rest of the letter/form.
 
-5. ZERO CHATTER, ZERO NOTES & CLEAN OUTPUT (কোনো নোট বা পরিবর্তন তালিকা আউটপুটে দেওয়া সম্পূর্ণ নিষিদ্ধ):
-   - NEVER output any [নোট ও পরিবর্তনসমূহ: ...], notes, change logs, explanations, or commentary anywhere in the output!
-   - Apply all corrections directly into the questions and text.
-   - Omit all exam board tags and citations ([ঢাকা বোর্ড-২০২৩], [ক্যাডেট কলেজ], [অধ্যায়-৩], [সহপাঠ]).
+5. MANDATORY DETAILED AUDIT NOTE (বাধ্যতামূলক অডিট নোট — সকল প্রশ্নের পর সম্পূর্ণ শেষে):
+   - At the VERY END of the verified document (AFTER all questions and text are finished), you MUST include a clean audit note block listing every single correction made:
+     [নোট ও পরিবর্তনসমূহ:
+     - প্রশ্ন ৩-এর উদ্দীপকে '...' মূল ছবির সাথে হুবহু মিলানো হয়েছে।
+     - বানান সংশোধন: '...' এর স্থলে '...' ঠিক করা হয়েছে।]
+   - CRITICAL MANDATE: NEVER attach or place this note inside or near any question or question number! It must be strictly on its own lines at the very bottom after all questions are completely finished.
+   - If absolutely NO errors were found and the draft was already 100% faithful:
+     [নোট: মূল ফাইলের সাথে সম্পূর্ণ যাচাইকৃত, কোনো পরিবর্তন করা হয়নি।]
 
 OUTPUT REQUIREMENT:
-Output ONLY the COMPLETE, FULL, 100% VERIFIED AND CLEAN document text from start to finish. Do NOT include any [নোট...] block or conversational filler.`;
+Output the COMPLETE, FULL document text from start to finish, ending with the mandatory [নোট... block at the very bottom.`;
 
   const DEFAULT_GEMINI_API_KEY = (typeof atob === 'function' ? atob('QVEuQWI4Uk42S1pDTXNmUTQtckhLV0U4NF83cXBxeGdHS1BMM2x4M1F6RXBBa3k4LUpuN2c=') : '');
 
@@ -2303,7 +2307,7 @@ Output ONLY the COMPLETE, FULL, 100% VERIFIED AND CLEAN document text from start
         await sleep(800);
         verifiedRawText = currentText + '\n\n[নোট: অফলাইন ডেমো মোডে মূল ফাইলের সাথে যাচাই সম্পন্ন হয়েছে।]';
       } else {
-        const extraTextContent = `[পূর্বে সংগৃহীত খসড়া টেক্সট (DRAFT TO BE AUDITED & VERIFIED AGAINST ATTACHED IMAGES)]:\n\n${currentText}\n\n[নির্দেশনা: উপরের খসড়া টেক্সটটিকে সংযুক্ত মূল ছবিগুলোর সাথে পুঙ্খানুপুঙ্খ মিলিয়ে বানান ভুল, উদ্দীপকের বিচ্যুতি এবং কোনো প্রশ্ন বা উপ-প্রশ্ন বাদ পড়ে থাকলে তা সংশোধন করে সম্পূর্ণ নির্ভুল প্রশ্নপত্র প্রস্তুত করুন। কোনো প্রকার নোট বা ব্যাখ্যা ছাড়া সরাসরি ১০০% সংশোধিত ও নির্ভুল প্রশ্নপত্র প্রদান করুন।]`;
+        const extraTextContent = `[পূর্বে সংগৃহীত খসড়া টেক্সট (DRAFT TO BE AUDITED & VERIFIED AGAINST ATTACHED IMAGES)]:\n\n${currentText}\n\n[নির্দেশনা: উপরের খসড়া টেক্সটটিকে সংযুক্ত মূল ছবিগুলোর সাথে পুঙ্খানুপুঙ্খ মিলিয়ে বানান ভুল, উদ্দীপকের বিচ্যুতি এবং কোনো প্রশ্ন বা উপ-প্রশ্ন বাদ পড়ে থাকলে তা সংশোধন করে সম্পূর্ণ নির্ভুল প্রশ্নপত্র প্রস্তুত করুন। সকল প্রশ্ন শেষ হওয়ার পর একদম নিচে আলাদাভাবে একটি [নোট ও পরিবর্তনসমূহ:] ব্লকে কী কী সংশোধন করেছেন তা পয়েন্ট আকারে উল্লেখ করুন।]`;
 
         verifiedRawText = await executeGeminiRequest(
           apiKey,
