@@ -731,7 +731,10 @@
 
       const is2Col = layout && layout.columns === 2;
       const isLegal = layout && layout.pageSize === 'legal';
-      const rightTabPos = is2Col ? (isLegal ? '5130' : '4960') : (isLegal ? '10800' : '10460');
+      const isLandscape = layout && layout.orientation === 'landscape';
+      const rightTabPos = isLandscape
+        ? (is2Col ? '7050' : '15300')
+        : (is2Col ? (isLegal ? '5130' : '4960') : (isLegal ? '10800' : '10460'));
 
       switch (block.type) {
         case 'header_time_marks': {
@@ -881,37 +884,53 @@
               ${renderRuns(numPrefix + ' ', true, false, '24')}${renderRuns(block.text, false, false, '24')}${formattedMarks ? `<w:r><w:tab/></w:r>${renderRuns(formattedMarks, true, false, '24')}` : ''}
             </w:p>`;
           } else {
-            // CQ Question: Native hanging indent (11.7pt = 234 dxa)
+            // CQ Question: Native hanging indent (432 dxa = 0.3 in)
+            // Left margin = 432 dxa, hanging = 432 dxa
+            // Serial number (১।) sits at left margin (0 dxa), text/stimulus flows from 432 dxa.
+            // NO text wraps under the question serial!
+            const qIndent = 432;
+            let firstLineText = (block.text || '').trim();
+            let remainingStimLines = [];
+
+            if (block.stimulus) {
+              const allStimLines = block.stimulus.split('\n').map(l => l.trim()).filter(Boolean);
+              if (!firstLineText && allStimLines.length > 0) {
+                firstLineText = allStimLines[0];
+                remainingStimLines = allStimLines.slice(1);
+              } else {
+                remainingStimLines = allStimLines;
+              }
+            }
+
             xml += `
             <w:p>
               <w:pPr>
-                <w:ind w:left="234" w:hanging="234"/>
+                <w:ind w:left="${qIndent}" w:hanging="${qIndent}"/>
                 <w:tabs>
-                  <w:tab w:val="left" w:pos="234"/>
+                  <w:tab w:val="left" w:pos="${qIndent}"/>
                   <w:tab w:val="right" w:pos="${rightTabPos}"/>
                 </w:tabs>
                 <w:spacing w:before="60" w:after="20" w:line="240" w:lineRule="auto"/>
               </w:pPr>
               ${renderRuns(numPrefix, true, false, '24')}
               <w:r><w:tab/></w:r>
-              ${renderRuns(block.text, false, false, '24')}
+              ${renderRuns(firstLineText, false, false, '24')}
               ${formattedMarks ? `<w:r><w:tab/></w:r>${renderRuns(formattedMarks, true, false, '24')}` : ''}
             </w:p>`;
-          }
 
-          // Stimulus/Passage if any: Indented cleanly aligned with question text (234 dxa, not under number)
-          if (block.stimulus) {
-            const stimLines = block.stimulus.split('\n');
-            for (const sLine of stimLines) {
-              if (!sLine.trim()) continue;
-              xml += `
-              <w:p>
-                <w:pPr>
-                  <w:ind w:left="234"/>
-                  <w:spacing w:before="15" w:after="20" w:line="240" w:lineRule="auto"/>
-                </w:pPr>
-                ${renderRuns(sLine, false, false, '24')}
-              </w:p>`;
+            // Remaining Stimulus lines (if multi-line stimulus/passage)
+            // Left-aligned at qIndent (432 dxa), NO text under question number! NO border boxes!
+            if (remainingStimLines.length > 0) {
+              for (const sLine of remainingStimLines) {
+                xml += `
+                <w:p>
+                  <w:pPr>
+                    <w:ind w:left="${qIndent}"/>
+                    <w:spacing w:before="15" w:after="20" w:line="240" w:lineRule="auto"/>
+                  </w:pPr>
+                  ${renderRuns(sLine, false, false, '24')}
+                </w:p>`;
+              }
             }
           }
 
@@ -1031,12 +1050,10 @@
           return `
           <w:p>
             <w:pPr>
-              <w:pBdr><w:left w:val="single" w:sz="24" w:space="10" w:color="1E3A8A"/></w:pBdr>
-              <w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>
-              <w:spacing w:before="60" w:after="60" w:line="240" w:lineRule="auto"/>
-              <w:ind w:left="160" w:right="120"/>
+              <w:ind w:left="432"/>
+              <w:spacing w:before="30" w:after="30" w:line="240" w:lineRule="auto"/>
             </w:pPr>
-            ${renderRuns(block.text, false, true, '21')}
+            ${renderRuns(block.text, false, false, '24')}
           </w:p>`;
         }
 

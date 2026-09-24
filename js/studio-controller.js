@@ -394,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
       editable: studioState.isEditing
     };
 
-    if (docType === 'EXAM_CQ' || docType === 'EXAM_MATH') {
+    if (docType === 'EXAM_CQ' || docType === 'EXAM_MATH' || docType === 'EXAM_COMBINED' || docType === 'EXAM_GENERAL') {
       currentParsedData = QuestionEngine.parseQuestionPaper(raw);
       previewContainer.innerHTML = QuestionEngine.renderToHtml(currentParsedData, options);
       if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
@@ -572,6 +572,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function getDocTypeBanglaLabel(type) {
     switch (type) {
       case 'EXAM_CQ': return 'সৃজনশীল প্রশ্নপত্র (CQ)';
+      case 'EXAM_GENERAL': return 'সাধারণ/প্রাথমিক প্রশ্নপত্র';
+      case 'EXAM_COMBINED': return 'সম্মিলিত সিকিউ+এমসিকিউ';
       case 'EXAM_MCQ': return 'বহুনির্বাচনী প্রশ্ন (MCQ)';
       case 'EXAM_MATH': return 'গণিত ও বিজ্ঞান প্রশ্ন';
       case 'STAMP_DEED': return '৩০০ টাকার স্ট্যাম্প দলিল';

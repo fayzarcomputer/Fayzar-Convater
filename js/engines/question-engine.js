@@ -18,6 +18,9 @@
      */
     parseQuestionPaper(rawText) {
       if (!rawText) rawText = '';
+      // 0. Strip vision layout tags
+      rawText = rawText.replace(/^\s*\[LAYOUT:[^\]]*\]\s*[\r\n]?/im, '');
+
       // 1. Normalize line endings and form-feeds
       const normalized = rawText
         .replace(/\r\n/g, '\n')
@@ -47,51 +50,52 @@
       // Extract header lines from top
       for (let i = 0; i < Math.min(8, lines.length); i++) {
         const line = lines[i];
-        if (/^[\u09E6-\u09EF\d]+[।.)]/.test(line) || /^([কখগঘ]|[abcdABCD])[\.\:।\-]/.test(line)) {
+        const cleanLine = line.replace(/^[\*\#\-\s]+/, '').trim();
+        if (/^[\u09E6-\u09EF\d]+[।.)]/.test(cleanLine) || /^([কখগঘ]|[abcdABCD])[\.\:।\-]/.test(cleanLine) || /^#{1,6}\s*[\u09E6-\u09EF\d]+[।.)]/.test(line)) {
           break; // Questions have started, header is complete
         }
-        if (!result.header.institute && /স্কুল|কলেজ|মাদরাসা|বিদ্যালয়|একাডেমী|প্রতিষ্ঠান/i.test(line)) {
-          result.header.institute = line;
+        if (!result.header.institute && /স্কুল|কলেজ|মাদরাসা|বিদ্যালয়|একাডেমী|প্রতিষ্ঠান/i.test(cleanLine)) {
+          result.header.institute = cleanLine;
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
-        } else if (!result.header.location && /ফুলবাড়ী|দিনাজপুর|ঢাকা|উপজেলা|জেলা/i.test(line) && !/শ্রেণি|বিষয়|সময়/.test(line)) {
-          result.header.location = line;
+        } else if (!result.header.location && /ফুলবাড়ী|দিনাজপুর|ঢাকা|উপজেলা|জেলা/i.test(cleanLine) && !/শ্রেণি|বিষয়|সময়/.test(cleanLine)) {
+          result.header.location = cleanLine;
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
-        } else if (!result.header.exam && /পরীক্ষা|মূল্যায়ন|টার্ম|সেমিস্টার|নির্বাচনী/i.test(line) && !/বহুনির্বাচন|নৈর্ব্যক্তিক/.test(line)) {
-          result.header.exam = line;
+        } else if (!result.header.exam && /পরীক্ষা|মূল্যায়ন|টার্ম|সেমিস্টার|নির্বাচনী/i.test(cleanLine) && !/বহুনির্বাচন|নৈর্ব্যক্তিক/.test(cleanLine)) {
+          result.header.exam = cleanLine;
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
-        } else if (!result.header.classAndSubject && /শ্রেণি|বিষয়/i.test(line)) {
-          let cleanLine = line;
-          const examSubMatch = cleanLine.match(/(বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?)/i);
+        } else if (/শ্রেণি|বিষয়/i.test(cleanLine)) {
+          let cLine = cleanLine;
+          const examSubMatch = cLine.match(/(বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?)/i);
           if (examSubMatch) {
             result.header.examType = examSubMatch[1].trim();
-            cleanLine = cleanLine.replace(examSubMatch[0], '').trim();
-            cleanLine = cleanLine.replace(/;\s*$/, ';').trim();
+            cLine = cLine.replace(examSubMatch[0], '').trim();
+            cLine = cLine.replace(/;\s*$/, ';').trim();
           }
-          result.header.classAndSubject = cleanLine;
+          result.header.classAndSubject = (result.header.classAndSubject ? result.header.classAndSubject + '  |  ' : '') + cLine;
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
-        } else if ((line.startsWith('[') && line.endsWith(']')) || /^\[?বিশেষ\s*দ্রষ্টব্য/i.test(line)) {
-          result.header.instructions = line;
+        } else if ((cleanLine.startsWith('[') && cleanLine.endsWith(']')) || /^\[?বিশেষ\s*দ্রষ্টব্য/i.test(cleanLine)) {
+          result.header.instructions = cleanLine;
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
-        } else if (!line.startsWith('[') && /বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা/i.test(line) && !/সময়|পূর্ণমান/.test(line)) {
-          const examSubMatch = line.match(/(বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?)/i);
+        } else if (!cleanLine.startsWith('[') && /বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা/i.test(cleanLine) && !/সময়|পূর্ণমান/.test(cleanLine)) {
+          const examSubMatch = cleanLine.match(/(বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?)/i);
           if (examSubMatch) {
             result.header.examType = examSubMatch[1].trim();
           } else {
-            result.header.examType = line.trim();
+            result.header.examType = cleanLine.trim();
           }
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
-        } else if ((/সময়/i.test(line) || /পূর্ণমান|মান/i.test(line)) && (!result.header.time || !result.header.marks)) {
-          let cleanLine = line;
-          const examSubMatch = cleanLine.match(/(বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?)/i);
+        } else if ((/সময়/i.test(cleanLine) || /পূর্ণমান|মান/i.test(cleanLine)) && (!result.header.time || !result.header.marks)) {
+          let cLine = cleanLine;
+          const examSubMatch = cLine.match(/(বহুনির্বাচন[িী]\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?|নৈর্ব্যক্তিক\s*অভ[িী]ক্ষা(?:[\-\s]*[\u09E6-\u09EF\d]+)?)/i);
           if (examSubMatch) {
             result.header.examType = examSubMatch[1].trim();
-            cleanLine = cleanLine.replace(examSubMatch[0], ' ');
+            cLine = cLine.replace(examSubMatch[0], ' ');
           }
 
-          const tMatch = cleanLine.match(/সময়[ঃ:\-]\s*([^\n;]+?)(?:পূর্ণমান|মান|$)/i);
-          const mMatch = cleanLine.match(/(?:পূর্ণমান|মান)[ঃ:\-]\s*([\u09E6-\u09EF\d]+)/i);
-          if (tMatch) result.header.time = tMatch[1].trim();
-          if (mMatch) result.header.marks = mMatch[1].trim();
+          const tMatch = cLine.match(/সময়[ঃ:\-]\s*([^;\n|]+?)(?=(?:পূর্ণমান|সৃজনশীল|বহুনির্বাচন|মান|$))/i);
+          const mMatch = cLine.match(/(?:পূর্ণমান|মান)[ঃ:\-]?\s*([^\n;]+)/i);
+          if (tMatch && !result.header.time) result.header.time = tMatch[1].trim();
+          if (mMatch && !result.header.marks) result.header.marks = mMatch[1].trim();
           bodyStartIndex = Math.max(bodyStartIndex, i + 1);
         }
       }
@@ -118,7 +122,7 @@
         }
 
         // Shared Context / Stimulus Detection before a question (e.g. নিচের উদ্দীপকটি পড়ে ২৫ ও ২৬...)
-        if (/^নিচের\s*(?:উদ্দীপক|অনুচ্ছেদ|তথ্য|ছক|চিত্র)/i.test(line) && !line.match(/^([\u09E6-\u09EF\d]+)[।.)]/)) {
+        if (/^নিচের\s*(?:উদ্দীপক|অনুচ্ছেদ|তথ্য|ছক|চিত্র)/i.test(line) && !line.match(/^(?:#{1,6}\s*)?([\u09E6-\u09EF\d]+)[।.)]/)) {
           if (currentQuestion) {
             currentSection.questions.push(currentQuestion);
             currentQuestion = null;
@@ -127,8 +131,8 @@
           continue;
         }
 
-        // Question Number Match (১।, ২।, ৩। or 1., 2., 3.)
-        const qStartMatch = line.match(/^([\u09E6-\u09EF\d]+)[।.)]\s*(.*)$/);
+        // Question Number Match (১।, ২।, ৩। or 1., 2., 3. or ## ১।)
+        const qStartMatch = line.match(/^(?:#{1,6}\s*)?([\u09E6-\u09EF\d]+)[।.)]\s*(.*)$/);
         if (qStartMatch) {
           if (currentQuestion) {
             currentSection.questions.push(currentQuestion);
@@ -205,13 +209,14 @@
           continue;
         }
 
-        // Append to question text / stimulus
+        // Append to question text / stimulus (strip leading > if present)
         if (currentQuestion) {
+          const cleanStim = line.replace(/^>\s?/, '');
           if (currentQuestion.subQuestions.length === 0 && currentQuestion.options.length === 0) {
-            currentQuestion.stimulus += (currentQuestion.stimulus ? '\n' : '') + line;
+            currentQuestion.stimulus += (currentQuestion.stimulus ? '\n' : '') + cleanStim;
           } else if (currentQuestion.subQuestions.length > 0) {
             const lastSub = currentQuestion.subQuestions[currentQuestion.subQuestions.length - 1];
-            lastSub.text += ' ' + line;
+            lastSub.text += ' ' + cleanStim;
           }
         }
       }
@@ -332,29 +337,46 @@
 
         html += `</div>`;
       } else {
-        // CQ Question Item
-        html += `<div class="cq-q-item">`;
-        html += `<div class="cq-q-row">`;
-        html += `<span class="cq-num">${this.escape(q.num)}.</span>`;
-        html += `<span class="cq-text">${this.escape(q.text)}</span>`;
+        // CQ Question Item: Hanging indent so question number (১।) is on left, text/stimulus strictly to the right
+        const firstLineText = (q.text || '').trim();
+        let displayStimulus = q.stimulus || '';
+        let stimFirstLine = '';
+        let stimRemaining = '';
+
+        if (!firstLineText && displayStimulus) {
+          const stimLines = displayStimulus.split('\n').map(l => l.trim()).filter(Boolean);
+          if (stimLines.length > 0) {
+            stimFirstLine = stimLines[0];
+            stimRemaining = stimLines.slice(1).join('\n');
+          }
+        } else {
+          stimRemaining = displayStimulus;
+        }
+
+        const displayText = firstLineText || stimFirstLine;
+
+        html += `<div class="cq-q-item" style="margin-bottom: 6px; font-size: 12pt; line-height: 1.35;">`;
+        html += `<div class="cq-q-row" style="display: flex; align-items: flex-start;">`;
+        html += `<span class="cq-num font-bold" style="margin-right: 8px; flex-shrink: 0; min-width: 24px;">${this.escape(q.num)}।</span>`;
+        html += `<span class="cq-text text-justify flex-1">${this.escape(displayText)}</span>`;
         html += `</div>`;
 
-        if (q.stimulus) {
-          html += `<div class="cq-stimulus">`;
-          html += this.escape(q.stimulus).replace(/\n/g, '<br>');
+        if (stimRemaining) {
+          html += `<div class="cq-stimulus text-justify" style="padding-left: 32px !important; margin: 2px 0 !important; font-size: 12pt; line-height: 1.35;">`;
+          html += this.escape(stimRemaining).replace(/\n/g, '<br>');
           html += `</div>`;
         }
 
         if (q.subQuestions && q.subQuestions.length > 0) {
-          html += `<div class="cq-subs">`;
+          html += `<div class="cq-subs" style="padding-left: 32px !important; margin: 3px 0 0 0 !important;">`;
           for (const sub of q.subQuestions) {
             if (sub.isAlternative) {
-              html += `<div class="cq-or-divider text-center font-bold my-1" style="text-align: center; font-weight: bold; margin: 4px 0; color: #334155;">--- অথবা ---</div>`;
+              html += `<div class="cq-or-divider text-center font-bold my-1" style="text-align: center; font-weight: bold; margin: 4px 0; color: #334155; font-size: 12pt;">--- অথবা ---</div>`;
               continue;
             }
-            html += `<div class="cq-sub-row">`;
-            html += `<div class="flex-1 text-justify"><span class="cq-sub-lbl">${this.escape(sub.label)}.</span><span class="cq-sub-txt">${this.escape(sub.text)}</span></div>`;
-            html += `<div class="cq-sub-mark">${this.escape(sub.mark)}</div>`;
+            html += `<div class="cq-sub-row" style="display: flex; align-items: flex-start; justify-content: space-between; font-size: 12pt; margin: 2px 0;">`;
+            html += `<div class="flex-1 text-justify"><span class="cq-sub-lbl font-bold" style="margin-right: 6px;">${this.escape(sub.label)}.</span><span class="cq-sub-txt">${this.escape(sub.text)}</span></div>`;
+            html += `<div class="cq-sub-mark font-bold" style="margin-left: 12px; text-align: right; white-space: nowrap;">${this.escape(sub.mark)}</div>`;
             html += `</div>`;
           }
           html += `</div>`;

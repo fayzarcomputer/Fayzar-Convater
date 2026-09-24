@@ -152,7 +152,7 @@
     generateLegacyDoc(rawText, docType = 'EXAM_CQ', options = {}) {
       let qEngine = this._getQuestionEngine();
 
-      if (qEngine && (docType === 'EXAM_CQ' || docType === 'EXAM_MATH')) {
+      if (qEngine && (docType === 'EXAM_CQ' || docType === 'EXAM_MATH' || docType === 'EXAM_COMBINED' || docType === 'EXAM_GENERAL')) {
         const parsed = qEngine.parseQuestionPaper(rawText);
         const rtf = this.generateCqExamRtf(parsed, options);
         return new Blob([rtf], { type: 'application/msword' });
@@ -182,7 +182,7 @@
     async generateModernDocx(rawText, docType = 'EXAM_CQ', options = {}) {
       let qEngine = this._getQuestionEngine();
 
-      if (qEngine && (docType === 'EXAM_CQ' || docType === 'EXAM_MATH')) {
+      if (qEngine && (docType === 'EXAM_CQ' || docType === 'EXAM_MATH' || docType === 'EXAM_COMBINED' || docType === 'EXAM_GENERAL')) {
         const parsed = qEngine.parseQuestionPaper(rawText);
         return await this.generateCqExamDocx(parsed, options);
       }
@@ -369,12 +369,24 @@
         }
 
         for (const q of sec.questions) {
-          bodyXml += `<w:p><w:pPr><w:spacing w:before="40" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="240" w:hanging="240"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${this.formatDocxText(q.num + '. ' + q.text, options)}</w:t></w:r></w:p>`;
-
+          const qTextTrimmed = (q.text || '').trim();
+          let firstLineText = qTextTrimmed;
+          let remainingStimLines = [];
           if (q.stimulus) {
-            const stimLines = q.stimulus.split('\n').map(l => l.trim()).filter(Boolean);
-            for (const sLine of stimLines) {
-              bodyXml += `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="240"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${this.formatDocxText(sLine, options)}</w:t></w:r></w:p>`;
+            const allStimLines = q.stimulus.split('\n').map(l => l.trim()).filter(Boolean);
+            if (!firstLineText && allStimLines.length > 0) {
+              firstLineText = allStimLines[0];
+              remainingStimLines = allStimLines.slice(1);
+            } else {
+              remainingStimLines = allStimLines;
+            }
+          }
+
+          bodyXml += `<w:p><w:pPr><w:spacing w:before="60" w:after="20" w:line="240" w:lineRule="auto"/><w:ind w:left="432" w:hanging="432"/><w:tabs><w:tab w:val="left" w:pos="432"/><w:tab w:val="right" w:pos="${rightTabPos}"/></w:tabs></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${this.formatDocxText(q.num + '।', options)}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${this.formatDocxText(firstLineText, options)}</w:t></w:r></w:p>`;
+
+          if (remainingStimLines.length > 0) {
+            for (const sLine of remainingStimLines) {
+              bodyXml += `<w:p><w:pPr><w:spacing w:before="15" w:after="20" w:line="240" w:lineRule="auto"/><w:ind w:left="432"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${this.formatDocxText(sLine, options)}</w:t></w:r></w:p>`;
             }
           }
 
@@ -382,7 +394,7 @@
             for (const sub of q.subQuestions) {
               const subText = this.formatDocxText(sub.label + '. ' + sub.text, options);
               const subMark = this.formatDocxText(sub.mark || '', options);
-              bodyXml += `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="240"/><w:tabs><w:tab w:val="right" w:pos="${rightTabPos}"/></w:tabs></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${subText}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${subMark}</w:t></w:r></w:p>`;
+              bodyXml += `<w:p><w:pPr><w:spacing w:before="15" w:after="15" w:line="240" w:lineRule="auto"/><w:ind w:left="432" w:hanging="432"/><w:tabs><w:tab w:val="left" w:pos="432"/><w:tab w:val="right" w:pos="${rightTabPos}"/></w:tabs></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${subText}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${subMark}</w:t></w:r></w:p>`;
             }
           }
         }

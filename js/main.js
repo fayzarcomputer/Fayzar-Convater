@@ -2933,7 +2933,16 @@ function initUnifiedConverterEngine() {
 
     } catch (err) {
       console.error(err);
-      alert('AI রূপান্তর সম্পন্ন করা যায়নি: ' + err.message);
+      if (window.FayzarAiOcrEngine && window.FayzarAiOcrEngine.state) {
+        window.FayzarAiOcrEngine.state.isProcessing = false;
+      }
+      if (err.name === 'AbortError' || (err.message && (err.message.includes('বাতিল') || err.message.includes('aborted') || err.message.includes('abort')))) {
+        if (typeof window.showToastNotification === 'function') {
+          window.showToastNotification('রূপান্তর বাতিল করা হয়েছে', 'info');
+        }
+      } else {
+        alert('AI রূপান্তর সম্পন্ন করা যায়নি: ' + err.message);
+      }
       step2Box?.classList.remove('hidden');
       step3Box?.classList.add('hidden');
       wizardProgressCard?.classList.add('hidden');

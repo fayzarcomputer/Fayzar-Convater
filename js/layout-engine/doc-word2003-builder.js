@@ -598,18 +598,27 @@
               <b>${cvt(block.number)}${rawDelim === '.' ? '.' : cvt(rawDelim)}&nbsp;</b>${formatMath(block.text)}${formattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${formattedMarks}</b>` : ''}
             </p>`;
           } else {
-            html += `
-            <p class="MsoNormal" style="margin-left:11.7pt;text-indent:-11.7pt;tab-stops:11.7pt 24.75pt 351pt;margin-bottom:2pt;line-height:normal;text-align:justify;">
-              <b>${cvt(block.number)}${rawDelim === '.' ? '.' : cvt(rawDelim)}</b><span style='mso-tab-count:1'>&nbsp;</span>${formatMath(block.text)}${formattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${formattedMarks}</b>` : ''}
-            </p>`;
-          }
+            let firstLineText = (block.text || '').trim();
+            let remainingStimLines = [];
+            if (block.stimulus) {
+              const allStimLines = block.stimulus.split('\n').map(l => l.trim()).filter(Boolean);
+              if (!firstLineText && allStimLines.length > 0) {
+                firstLineText = allStimLines[0];
+                remainingStimLines = allStimLines.slice(1);
+              } else {
+                remainingStimLines = allStimLines;
+              }
+            }
 
-          // Stimulus if any: aligned directly at 11.7pt (never under number)
-          if (block.stimulus) {
-            const stimLines = block.stimulus.split('\n');
-            for (const sLine of stimLines) {
-              if (!sLine.trim()) continue;
-              html += `<p class="MsoNormal" style="margin-left:11.7pt;margin-bottom:2pt;line-height:1.2;text-align:justify;">${formatMath(sLine)}</p>`;
+            html += `
+            <p class="MsoNormal" style="margin-left:21.6pt;text-indent:-21.6pt;tab-stops:21.6pt 351pt;margin-bottom:2pt;line-height:normal;text-align:justify;font-size:12pt;">
+              <b>${cvt(block.number)}${rawDelim === '.' ? '.' : cvt(rawDelim)}</b><span style='mso-tab-count:1'>&nbsp;</span>${formatMath(firstLineText)}${formattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${formattedMarks}</b>` : ''}
+            </p>`;
+
+            if (remainingStimLines.length > 0) {
+              for (const sLine of remainingStimLines) {
+                html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:2pt;line-height:1.2;text-align:justify;font-size:12pt;">${formatMath(sLine)}</p>`;
+              }
             }
           }
 
@@ -622,15 +631,15 @@
                 const isOptionLine = /(\([ক-ঘa-d]\)|[ক-ঘa-d][\.\)])/i.test((sub.subId || '') + ' ' + (sub.text || ''));
                 if (!isOptionLine) {
                   if (sub.isPromptText) {
-                    html += `<p class="MsoNormal" style="margin-left:11.7pt;font-weight:bold;margin-bottom:2pt;line-height:normal;">${formatMath(sub.text)}</p>`;
+                    html += `<p class="MsoNormal" style="margin-left:21.6pt;font-weight:bold;margin-bottom:2pt;line-height:normal;font-size:12pt;">${formatMath(sub.text)}</p>`;
                   } else if (/^(?:[iIvVxX]+|[0-9]+)[\.\)]/.test(sub.subId || '')) {
                     const isRoman = /^[iIvVxX]+[\.\)]/.test(sub.subId || '');
                     const rIdHtml = isRoman
                       ? `<span style="font-family:'Times New Roman',serif;">${sub.subId}</span>`
                       : `<b>${cvt(sub.subId)}</b>`;
-                    html += `<p class="MsoNormal" style="margin-left:11.7pt;margin-bottom:1pt;line-height:normal;">${rIdHtml}&nbsp;${formatMath(sub.text)}</p>`;
+                    html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:1pt;line-height:normal;font-size:12pt;">${rIdHtml}&nbsp;${formatMath(sub.text)}</p>`;
                   } else {
-                    html += `<p class="MsoNormal" style="margin-left:11.7pt;margin-bottom:1.5pt;line-height:normal;">${formatMath((sub.subId ? sub.subId + '&nbsp;' : '') + sub.text)}</p>`;
+                    html += `<p class="MsoNormal" style="margin-left:21.6pt;margin-bottom:1.5pt;line-height:normal;font-size:12pt;">${formatMath((sub.subId ? sub.subId + '&nbsp;' : '') + sub.text)}</p>`;
                   }
                 }
               }
@@ -639,16 +648,15 @@
               html += DocWord2003Builder.formatMcqOptionsHtml(mcqOptions, cvt, formatMath);
             } else {
               // Standard Creative Sub-questions ((ক), (খ), (গ), (ঘ)) with marks
-              // Matches sample P8: Left=11.7pt, FirstLine=0pt, K. text\t1 (tab directly to 351pt)
               for (const sub of block.subQuestions) {
                 const subFormattedMarks = sub.marks ? ((isPureEnglish || sub.marks.includes('=')) ? `[${sub.marks}]` : cvt(sub.marks)) : '';
                 if (sub.isPromptText) {
-                  html += `<p class="MsoNormal" style="margin-left:11.7pt;font-weight:bold;margin-bottom:2pt;line-height:normal;">${formatMath(sub.text)}</p>`;
+                  html += `<p class="MsoNormal" style="margin-left:21.6pt;font-weight:bold;margin-bottom:2pt;line-height:normal;font-size:12pt;">${formatMath(sub.text)}</p>`;
                 } else {
                   const sId = (sub.subId || '').trim();
                   const sIdFormatted = sId ? (/[.\)।:]\s*$/.test(sId) ? sId : sId + '.') : '';
                   html += `
-                  <p class="MsoNormal" style="margin-left:11.7pt;text-indent:0pt;tab-stops:11.7pt 24.75pt 351pt;margin-bottom:1.5pt;line-height:normal;text-align:justify;">
+                  <p class="MsoNormal" style="margin-left:21.6pt;text-indent:0pt;tab-stops:21.6pt 351pt;margin-bottom:1.5pt;line-height:normal;text-align:justify;font-size:12pt;">
                     <b>${cvt(sIdFormatted)}&nbsp;</b>${formatMath(sub.text)}${subFormattedMarks ? `<span style='mso-tab-count:1'>&nbsp;</span><b>${subFormattedMarks}</b>` : ''}
                   </p>`;
                 }
@@ -662,9 +670,9 @@
 
         case 'stimulus_box': {
           return `
-          <div style="border:0.75pt solid #666; background:#f9f9f9; padding:4pt 6pt; margin:4pt 0 5pt 0; font-size:10.5pt; line-height:1.25; border-radius:2pt;">
+          <p class="MsoNormal" style="margin-left:21.6pt; margin-top:2pt; margin-bottom:2pt; font-size:12pt; line-height:1.2; text-align:justify;">
             ${cvt(block.text).replace(/\n/g, '<br/>')}
-          </div>`;
+          </p>`;
         }
 
         case 'table': {

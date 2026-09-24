@@ -113,18 +113,23 @@
 
   const GEMINI_PROMPT = `You are an elite Bengali Document Composer & LaTeX formatting specialist. Extract and compose a COMPLETE document from the provided images using STRICT MARKDOWN formatting.
 
-0. DOCUMENT ARCHETYPE LAYOUT TAG & SECTION BREAK (MANDATORY):
-   - LINE 1 OF OUTPUT MUST BE THE EXACT LAYOUT TAG based on document visual layout:
-     * Combined Exam (both Creative Questions & 20-30 MCQs present): [LAYOUT: COMBINED_EXAM]
-     * Creative Questions (CQ 70 marks, Class 6-12) only: [LAYOUT: CQ_BOOKLET]
-     * Multiple Choice Questions (STRICT MANDATE: ONLY if 100% of questions are MCQs OR there are 20-30 MCQs): [LAYOUT: MCQ_2COL]
-       -> CRITICAL: NEVER use [LAYOUT: MCQ_2COL] for general or primary exam papers just because 1 question has multiple choice options!
-     * Standard 2-Column Bengali Question Paper / Primary Exam (Class 1-5) / Short Questions: [LAYOUT: QUESTION_2COL]
-       -> Use this for general exam papers, Class 1-5 primary exam questions, short questions (সংক্ষিপ্ত প্রশ্ন), fill-in-the-blanks, true/false, matchings, etc.
-     * Mathematics / Science / Chemistry with equations: [LAYOUT: MATH_SCIENCE]
-     * Official Government / Institutional Notice / Memo: [LAYOUT: OFFICIAL_NOTICE]
-     * Legal Deed / 300 Tk Non-Judicial Stamp Contract: [LAYOUT: LEGAL_DEED]
-     * Otherwise: [LAYOUT: GENERAL_DOC]
+0. MANDATORY DOCUMENT ARCHETYPE FRONTMATTER (LINE 1 MUST START WITH '---'):
+   - Output an exact YAML frontmatter header at the very beginning between '---' delimiters:
+     ---
+     doc_type: <EXAM_CQ | EXAM_GENERAL | EXAM_MCQ | EXAM_COMBINED | OFFICE_PAD | PROTTOYON_CERT | GOVT_APP | OFFICIAL_NOTICE | LEGAL_DEED>
+     columns: <1 or 2>
+     ---
+   - SECTOR DETERMINATION RULES (DO NOT RELY ON COLUMNS IN HANDWRITTEN DRAFTS; CLASSIFY BY INTENDED PURPOSE):
+     * Creative Questions (CQ 70 marks, Class 6-12 with stimulus & ক,খ,গ,ঘ): doc_type: EXAM_CQ, columns: 2
+     * Standard/Primary Exam (Class 1-5, short questions, fill-in-blanks, matching, grammar, general questions): doc_type: EXAM_GENERAL, columns: 2
+       -> CRITICAL: NEVER classify general or primary exam papers as EXAM_CQ! If there is no stimulus or no 4-tier CQ sub-questions, it is EXAM_GENERAL.
+     * Pure Multiple Choice Questions (20-30 MCQs): doc_type: EXAM_MCQ, columns: 2
+     * Combined Exam (both Creative Questions & 20-30 MCQs): doc_type: EXAM_COMBINED, columns: 2
+     * Institutional Office Pad / Letterhead Memo: doc_type: OFFICE_PAD, columns: 1
+     * Testimonial / Character Certificate (প্রত্যয়নপত্র ও প্রশংসাপত্র): doc_type: PROTTOYON_CERT, columns: 1
+     * Government / Job Application (বরাবর, বিষয়, জনাব সংবলিত দরখাস্ত): doc_type: GOVT_APP, columns: 1
+     * Official Government / Institutional Notice / Memo: doc_type: OFFICIAL_NOTICE, columns: 1
+     * Legal Deed / 300 Tk Non-Judicial Stamp Contract: doc_type: LEGAL_DEED, columns: 1
    - SECTION BREAK MANDATE:
      * When transcribing a combined question paper (containing both Creative Questions and Multiple Choice Questions), when the Creative Question part ends and the Multiple Choice (MCQ) section begins (before its institutional header/title), YOU MUST INSERT THIS EXACT SEPARATOR ON ITS OWN LINE:
        ---SECTION_BREAK:MCQ---
@@ -349,7 +354,7 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
   const isDemo = (rawDemoSetting === 'true');
 
   let savedModelSetting = localStorage.getItem(STORAGE_KEYS.SELECTED_MODEL) || 'auto';
-  if (savedModelSetting === 'gemini-3.8-flash' || savedModelSetting === 'gemini-2.5-flash' || savedModelSetting.includes('lite')) {
+  if (savedModelSetting === 'gemini-3.8-flash' || savedModelSetting === 'gemini-2.5-flash' || savedModelSetting.includes('2.5') || savedModelSetting.includes('lite')) {
     savedModelSetting = 'auto';
     localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, 'auto');
   }
@@ -415,6 +420,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     setupEvents();
     loadConverterDictionary();
     checkDesktopBridgeOnline(true);
+    // Silently pre-warm 2-3 healthy keys and models in background (zero token cost)
+    if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.prewarmStandbyPool === 'function') {
+      FayzarOcrConfig.prewarmStandbyPool();
+    }
     // Poll bridge every 2.5s for instant status sync
     setInterval(() => {
       if (!state.isProcessing) {
@@ -514,7 +523,8 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
       byokModal: document.getElementById('ai-ocr-byok-modal'),
       byokInput: document.getElementById('ai-ocr-byok-input'),
       saveByokBtn: document.getElementById('ai-ocr-save-byok-btn'),
-      cancelByokBtn: document.getElementById('ai-ocr-cancel-byok-btn')
+      cancelByokBtn: document.getElementById('ai-ocr-cancel-byok-btn'),
+      customDirectiveInput: document.getElementById('ai-custom-directive-input')
     };
   }
 
@@ -929,6 +939,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     if (elements.convertBtn) elements.convertBtn.disabled = false;
     elements.successCard?.classList.add('hidden');
     showToast(`মোট ${toBengaliNumber(state.filesQueue.length)}টি পেজ প্রস্তুত! সবগুলো একসাথে সম্পূর্ণ রূপান্তর হবে।`, 'info');
+    // Pre-warm standby keys immediately in background while user reviews files
+    if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.prewarmStandbyPool === 'function') {
+      FayzarOcrConfig.prewarmStandbyPool();
+    }
   }
 
   // Render rich interactive thumbnail cards with Zoom & Delete
@@ -1333,6 +1347,11 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
       const jobId = 'job_' + Date.now();
       activeBridgeJobId = jobId;
 
+      const userDirective = (elements.customDirectiveInput ? elements.customDirectiveInput.value : (document.getElementById('ai-custom-directive-input')?.value || '')).trim();
+      const bridgePrompt = (userDirective)
+        ? `${GEMINI_PROMPT}\n\n### CRITICAL USER SCOPE DIRECTIVE (HIGHEST PRIORITY):\n"${userDirective}"\nFollow the above user directive strictly over any other extraction rule. Only extract what the user requested!`
+        : GEMINI_PROMPT;
+
       try {
         await fetch(`${FIREBASE_BRIDGE_URL}/requests/${jobId}.json`, {
           method: 'PUT',
@@ -1340,7 +1359,7 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
           body: JSON.stringify({
             status: 'pending',
             imageBase64: combinedBase64,
-            prompt: GEMINI_PROMPT,
+            prompt: bridgePrompt,
             timestamp: Date.now()
           })
         });
@@ -1574,21 +1593,35 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
     return item.base64;
   }
 
-  function fetchWithTimeout(url, options, timeoutMs) {
+  function fetchWithTimeout(url, options, timeoutMs = 60000) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => {
+      try {
+        controller.abort(new Error('কানেকশন টাইমআউট: সার্ভার নির্ধারিত সময়ে সাড়া দেয়নি।'));
+      } catch (e) {
+        controller.abort();
+      }
+    }, timeoutMs);
 
     let cleanupAbort = null;
     if (activeAbortController) {
       const onMainAbort = () => {
-        try { controller.abort(); } catch (e) {}
-      };
-      activeAbortController.signal.addEventListener('abort', onMainAbort, { once: true });
-      cleanupAbort = () => {
-        if (activeAbortController) {
-          try { activeAbortController.signal.removeEventListener('abort', onMainAbort); } catch (e) {}
+        try {
+          controller.abort(activeAbortController.signal.reason || new Error('রূপান্তর বাতিল করা হয়েছে'));
+        } catch (e) {
+          controller.abort();
         }
       };
+      if (activeAbortController.signal.aborted) {
+        onMainAbort();
+      } else {
+        activeAbortController.signal.addEventListener('abort', onMainAbort, { once: true });
+        cleanupAbort = () => {
+          if (activeAbortController) {
+            try { activeAbortController.signal.removeEventListener('abort', onMainAbort); } catch (e) {}
+          }
+        };
+      }
     }
 
     return fetch(url, { ...options, signal: controller.signal })
@@ -1624,13 +1657,18 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
 
       const jobId = 'job_' + Date.now();
 
+      const userDirective = (elements.customDirectiveInput ? elements.customDirectiveInput.value : (document.getElementById('ai-custom-directive-input')?.value || '')).trim();
+      const bridgePrompt = (userDirective)
+        ? `${GEMINI_PROMPT}\n\n### CRITICAL USER SCOPE DIRECTIVE (HIGHEST PRIORITY):\n"${userDirective}"\nFollow the above user directive strictly over any other extraction rule. Only extract what the user requested!`
+        : GEMINI_PROMPT;
+
       await fetch(`${FIREBASE_BRIDGE_URL}/requests/${jobId}.json`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'pending',
           imageBase64: combinedBase64,
-          prompt: GEMINI_PROMPT,
+          prompt: bridgePrompt,
           timestamp: Date.now()
         })
       });
@@ -1764,12 +1802,16 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
       ? [...mediaParts, { text: extraTextContent }]
       : mediaParts;
 
-    const activePrompt = customPrompt || GEMINI_PROMPT;
+    const userDirective = (elements && elements.customDirectiveInput ? elements.customDirectiveInput.value : (document.getElementById('ai-custom-directive-input')?.value || '')).trim();
+    let activePrompt = customPrompt || GEMINI_PROMPT;
+    if (userDirective && !customPrompt) {
+      activePrompt += `\n\n### CRITICAL USER SCOPE DIRECTIVE (HIGHEST PRIORITY):\n"${userDirective}"\nFollow the above user directive strictly over any other extraction rule. Only extract what the user requested!`;
+    }
 
     const allActiveModels = [
-      'gemini-2.5-flash',         // #1: Ultra-fast, zero reasoning delay, 100% active
-      'gemini-3-flash-preview',   // #2: Deep reasoning Flash flagship
-      'gemini-2.5-pro'            // #3: Pro quality OCR
+      'gemini-3-flash-preview',   // #1: ডিপ রিজনিং ফ্ল্যাগশিপ — শতভাগ কাঠামোগত নির্ভুল বাংলা ও টেবিল
+      'gemini-3.8-flash',         // #2: গণিত ও বিজ্ঞান স্পেশালিস্ট — জটিল সমীকরণ ও LaTeX
+      'gemini-3.6-flash'          // #3: উচ্চগতির ব্যালেন্সড ব্যাকআপ
     ];
 
     // Helper: Build optimal payload tailored per model (bypassing reasoning deliberation latency)
@@ -1778,11 +1820,6 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
         temperature: 0.2,
         maxOutputTokens: isFallbackFormat ? 8192 : 65536
       };
-
-      // Only 2.5-flash confirmed to support thinkingBudget; 3.6-flash uses standard config
-      if (!isFallbackFormat && model === 'gemini-2.5-flash') {
-        genConfig.thinkingConfig = { thinkingBudget: 0 };
-      }
 
       const safetySettings = [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -1809,119 +1846,51 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
       };
     }
 
-    // Build Key Pool (Pre-validated keys with dynamic round-robin load balancing across all 19 vault keys)
-    let keyPool = [];
     const isValidKeyFn = (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.isValidApiKey === 'function')
       ? FayzarOcrConfig.isValidApiKey
       : (k => typeof k === 'string' && (k.trim().startsWith('AIzaSy') || k.trim().startsWith('AQ.')) && k.trim().length >= 35);
 
-    if (typeof window !== 'undefined' && window.forceKeyIndex !== undefined && window.forceKeyIndex !== null && typeof FayzarOcrConfig !== 'undefined' && FayzarOcrConfig.keys) {
-      const forcedKey = FayzarOcrConfig.keys[window.forceKeyIndex];
-      if (forcedKey) keyPool.push(forcedKey);
-    } else {
-      // 1. Primary: Rotated system keys from vault (guarantees a fresh new key on every run)
-      if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.getRotatedSystemKeys === 'function') {
-        const rotatedKeys = FayzarOcrConfig.getRotatedSystemKeys(false);
-        for (const sk of rotatedKeys) {
-          if (!keyPool.includes(sk)) keyPool.push(sk);
-        }
-      } else if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.getAllSystemKeys === 'function') {
-        const systemKeys = FayzarOcrConfig.getAllSystemKeys(false);
-        for (const sk of systemKeys) {
-          if (!keyPool.includes(sk)) keyPool.push(sk);
-        }
-      }
-    }
-
-    // 2. Fallback to cooldown keys if all active keys exhausted
-    if (keyPool.length === 0 && typeof FayzarOcrConfig !== 'undefined') {
-      const fallbackKeys = (typeof FayzarOcrConfig.getRotatedSystemKeys === 'function')
-        ? FayzarOcrConfig.getRotatedSystemKeys(true)
-        : FayzarOcrConfig.getAllSystemKeys(true);
-      for (const fk of fallbackKeys) {
-        if (!keyPool.includes(fk)) keyPool.push(fk);
-      }
-    }
-
-    // 3. User custom key (if explicitly supplied and not already in pool)
-    if (apiKey && isValidKeyFn(apiKey) && !keyPool.includes(apiKey.trim())) {
-      keyPool.push(apiKey.trim());
-    }
-
     let candidateModels;
-    if (state.selectedModel && state.selectedModel !== 'auto') {
+    if (state.selectedModel && state.selectedModel !== 'auto' && state.selectedModel !== 'pro-bridge' && !state.selectedModel.includes('2.5-flash')) {
       candidateModels = [state.selectedModel, ...allActiveModels.filter(m => m !== state.selectedModel)];
     } else {
-      candidateModels = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro'];
+      // ১০০% প্রমাণিত ও দ্রুততম সক্রিয় মডেল সিকোয়েন্স:
+      // #1 gemini-3-flash-preview (ডিপ রিজনিং) | #2 gemini-3.6-flash (উচ্চগতির ব্যাকআপ)
+      candidateModels = [
+        'gemini-3-flash-preview',
+        'gemini-3.6-flash'
+      ];
     }
 
-    // ⚡ FAST PRE-FLIGHT MICRO-PROBE (সর্বোচ্চ ২ সেকেন্ডে সক্রিয় কি নির্বাচন)
-    if (keyPool.length > 0) {
-      try {
-        setLoading(true, '⚡ সক্রিয় ক্লাউড চ্যানেল নির্বাচন হচ্ছে...', 48);
-
-        const preferredModel = candidateModels[0];
-        const singleProbe = async (k, mod, timeoutMs = 2500) => {
-          const controller = new AbortController();
-          const tId = setTimeout(() => controller.abort(), timeoutMs);
-          try {
-            const probeUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${encodeURIComponent(k)}`;
-            const pRes = await fetch(probeUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: '1' }] }],
-                generationConfig: { maxOutputTokens: 1 }
-              }),
-              signal: controller.signal
-            });
-            clearTimeout(tId);
-            if (pRes.ok) return { key: k, model: mod, ok: true };
-            if (pRes.status === 400 && typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.markKeyInvalid === 'function') {
-              FayzarOcrConfig.markKeyInvalid(k);
-            } else if (pRes.status === 429 && typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.markKeyCooldown === 'function') {
-              FayzarOcrConfig.markKeyCooldown(k, 30);
-            }
-            return { key: k, model: mod, ok: false, status: pRes.status };
-          } catch (e) {
-            clearTimeout(tId);
-            return { key: k, model: mod, ok: false, error: e.name };
-          }
-        };
-
-        // Test top 3 rotated keys in parallel for ultra-fast response (<= 2s)
-        const topBatch = keyPool.slice(0, 3);
-        const winner = await Promise.any(topBatch.map(k => singleProbe(k, preferredModel).then(res => {
-          if (res.ok) return res;
-          throw res;
-        }))).catch(() => null);
-
-        if (winner && winner.key && winner.model) {
-          keyPool = [winner.key, ...keyPool.filter(k => k !== winner.key)];
-          candidateModels = [winner.model, ...candidateModels.filter(m => m !== winner.model)];
-          setLoading(true, `⚡ সক্রিয় চ্যানেল [${winner.model}] চূড়ান্ত নির্বাচিত! রূপান্তর চলছে...`, 52);
-        }
-      } catch (probeErr) {
-        // Fallback directly to candidate pool without delay
-      }
-    }
+    setLoading(true, `⚡ সরাসরি নির্বাচিত মডেলে [${candidateModels[0]}] রূপান্তর শুরু হচ্ছে...`, 50);
 
     let lastError = null;
     let isRateLimited = false;
 
-    // KEY-FIRST STRATEGY: For each model, try ALL keys before moving to next model.
-    // This guarantees all 19 vault keys are rotated through before any model fallback.
+    // MODEL & KEY STRATEGY: For each model, try all healthy keys specifically for that model.
     for (let i = 0; i < candidateModels.length; i++) {
       const model = candidateModels[i];
+
+      // Build key pool prioritized for THIS specific model (healthy keys at front, cooling keys at back)
+      let keyPool = [];
+      if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.getKeysForModel === 'function') {
+        keyPool = FayzarOcrConfig.getKeysForModel(model, true);
+      } else if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.getRotatedSystemKeys === 'function') {
+        keyPool = FayzarOcrConfig.getRotatedSystemKeys(true);
+      }
+
+      if (apiKey && isValidKeyFn(apiKey) && !keyPool.includes(apiKey.trim())) {
+        keyPool.unshift(apiKey.trim());
+      }
 
       for (let k = 0; k < keyPool.length; k++) {
         const currentKey = keyPool[k];
 
-        // Skip keys currently on cooldown or invalid (unless all keys are cooling down, in which case we still try them)
-        if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.isKeyAvailable === 'function') {
-          const isAvail = FayzarOcrConfig.isKeyAvailable(currentKey);
+        // Skip keys currently cooling down specifically on THIS model (unless all are cooling)
+        if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.isKeyModelAvailable === 'function') {
+          const isAvail = FayzarOcrConfig.isKeyModelAvailable(currentKey, model);
           if (!isAvail) {
-            const hasHealthy = keyPool.some(k => FayzarOcrConfig.isKeyAvailable(k));
+            const hasHealthy = keyPool.some(k => FayzarOcrConfig.isKeyModelAvailable(k, model));
             if (hasHealthy) continue;
           }
         }
@@ -1945,7 +1914,9 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
           }, CONNECT_TIMEOUT_MS);
 
           if (res.status === 404) {
-            // Model not found on this key -> immediately try next key (same model)
+            if (typeof FayzarOcrConfig !== 'undefined') {
+              if (typeof FayzarOcrConfig.markKeyModelCooldown === 'function') FayzarOcrConfig.markKeyModelCooldown(currentKey, model, 300);
+            }
             continue;
           }
 
@@ -1977,26 +1948,30 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
               }
             } else if (res.status === 429 || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota') || errMsg.includes('Quota')) {
               isRateLimited = true;
-              if (model.includes('pro')) {
-                // Pro model quota is exhausted: do NOT cooldown key for Flash models!
-                // Instantly switch to the top Flash model
-                setLoading(true, `⚡ অতি দ্রুততম সক্রিয় ফ্ল্যাশ মডেলে তাৎক্ষণিক সুইচ হচ্ছে...`, 50);
-                break;
-              }
               if (typeof FayzarOcrConfig !== 'undefined') {
-                if (typeof FayzarOcrConfig.markKeyCooldown === 'function') FayzarOcrConfig.markKeyCooldown(currentKey, 15);
+                if (typeof FayzarOcrConfig.markKeyModelCooldown === 'function') {
+                  FayzarOcrConfig.markKeyModelCooldown(currentKey, model, 14400);
+                } else if (typeof FayzarOcrConfig.markKeyCooldown === 'function') {
+                  FayzarOcrConfig.markKeyCooldown(currentKey, 14400);
+                }
                 if (typeof FayzarOcrConfig.advanceRoundRobin === 'function') FayzarOcrConfig.advanceRoundRobin();
               }
-              // ZERO DELAY FAILOVER: Instant shift to next key with 0ms pause
-              setLoading(true, `⚡ কোটা অপ্টিমাইজেশন সম্পন্ন, সক্রিয় চ্যানেলে রূপান্তর চলছে...`, 50 + Math.min(40, (k + 1) * 2));
+              // ZERO DELAY FAILOVER: 100-250ms instant handover to next key without model drop
+              setLoading(true, `⚡ কোটা অপ্টিমাইজেশন: সক্রিয় কি-তে তাৎক্ষণিক সুইচ হচ্ছে...`, 50 + Math.min(40, (k + 1) * 2));
               continue;
             } else if (res.status === 503 || errMsg.includes('No capacity') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE') || res.status === 404 || errMsg.includes('not found') || errMsg.includes('no longer available')) {
-              // Model unavailable / deprecated / server capacity exhausted -> immediately break key loop and switch model (0ms delay)
-              if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.logAudit === 'function') {
-                FayzarOcrConfig.logAudit('MODEL_FAILOVER', { failedModel: model, error: errMsg });
+              if (typeof FayzarOcrConfig !== 'undefined') {
+                if (typeof FayzarOcrConfig.markKeyModelCooldown === 'function') {
+                  FayzarOcrConfig.markKeyModelCooldown(currentKey, model, 300);
+                }
+                if (typeof FayzarOcrConfig.advanceRoundRobin === 'function') FayzarOcrConfig.advanceRoundRobin();
+                if (typeof FayzarOcrConfig.logAudit === 'function') {
+                  FayzarOcrConfig.logAudit('KEY_MODEL_ERROR', { keyMask: currentKey.slice(0, 8) + '...', model, error: errMsg });
+                }
               }
-              setLoading(true, `⚡ বিকল্প সক্রিয় মডেলে স্বয়ংক্রিয়ভাবে রূপান্তর সম্পন্ন হচ্ছে...`, 50 + Math.min(40, (k + 1) * 2));
-              break; // Instantly move to next candidate model!
+              // Try next key instead of dropping the model
+              setLoading(true, `⚡ বিকল্প কি-তে চ্যানেল সুইচ হচ্ছে...`, 50 + Math.min(40, (k + 1) * 2));
+              continue;
             } else {
               if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.advanceRoundRobin === 'function') {
                 FayzarOcrConfig.advanceRoundRobin();
@@ -2015,15 +1990,31 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
             let buffer = '';
             let fullStreamedText = '';
             let lastChunkTime = 0;
-            const STREAM_IDLE_TIMEOUT_MS = 35000; // 35s realistic stream idle timeout for complex OCR & math generation
+            const STREAM_IDLE_TIMEOUT_MS = 60000; // 60s idle keep-alive: accommodates math analysis & complex LaTeX thinking pauses
+            let shouldStopStream = false;
 
             while (true) {
+              if (shouldStopStream) break;
               let chunkTimeoutId;
               const chunkTimeoutPromise = new Promise((_, reject) => {
                 chunkTimeoutId = setTimeout(() => reject(new Error('স্ট্রিমিং চলাকালীন সংযোগ বিচ্ছিন্ন হয়েছে (Idle Timeout)')), STREAM_IDLE_TIMEOUT_MS);
               });
 
-              const { done, value } = await Promise.race([reader.read(), chunkTimeoutPromise]).finally(() => clearTimeout(chunkTimeoutId));
+              let readResult;
+              try {
+                readResult = await Promise.race([reader.read(), chunkTimeoutPromise]);
+              } catch (raceErr) {
+                // If we already received substantial text (>100 chars), treat timeout as stream completion rather than crashing!
+                if (fullStreamedText.length > 100) {
+                  console.warn('⚠️ স্ট্রিমিং টাইমআউটে সংগৃহীত টেক্সট সুরক্ষিত রাখা হলো:', fullStreamedText.length);
+                  break;
+                }
+                throw raceErr;
+              } finally {
+                clearTimeout(chunkTimeoutId);
+              }
+
+              const { done, value } = readResult || { done: true };
               if (done) break;
               buffer += decoder.decode(value, { stream: true });
               const lines = buffer.split('\n');
@@ -2048,6 +2039,27 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
                       if (fullStreamedText.includes('.......')) {
                         fullStreamedText = fullStreamedText.replace(/\.{8,}/g, '......');
                       }
+
+                      // 🛡️ রিপিটেশন লুপ ও অতিরিক্ত অক্ষরের ইনফিনিট স্ট্রিমিং প্রতিরোধ গার্ড
+                      // শুধুমাত্র অর্থহীন বড় টেক্সট লুপ (ডট, ড্যাশ, স্পেস ও টেবিল মার্কার ব্যতীত) শনাক্ত করবে
+                      if (fullStreamedText.length > 2000) {
+                        const tail = fullStreamedText.slice(-300);
+                        const cleanTail = tail.replace(/[\s\.\-_|~=\t]/g, '');
+                        const repeatMatch = cleanTail.match(/(.{20,50}?)\1{4,}/);
+                        if (repeatMatch) {
+                          console.warn('⚠️ রিপিটেশন লুপ শনাক্ত! স্ট্রিমিং সম্পন্ন করা হলো।');
+                          shouldStopStream = true;
+                          try { reader.cancel(); } catch(e){}
+                          break;
+                        }
+                      }
+                      if (fullStreamedText.length > 35000) {
+                        console.warn('⚠️ নিরাপদ অক্ষর সীমা (৩৫,০০০) অতিক্রম! স্ট্রিমিং সম্পন্ন করা হলো।');
+                        shouldStopStream = true;
+                        try { reader.cancel(); } catch(e){}
+                        break;
+                      }
+
                       const cTime = Date.now();
                       if (cTime - lastChunkTime > 60 || fullStreamedText.length < 80) {
                         lastChunkTime = cTime;
@@ -2081,6 +2093,10 @@ Output the COMPLETE, FULL, AUDITED document text from start to finish, ending wi
                 } catch (e) { /* ignore */ }
               }
               if (onStreamChunk) onStreamChunk(fullStreamedText);
+              // Replenish pre-warmed standby pool silently in background for next task
+              if (typeof FayzarOcrConfig !== 'undefined' && typeof FayzarOcrConfig.prewarmStandbyPool === 'function') {
+                setTimeout(() => FayzarOcrConfig.prewarmStandbyPool(), 1000);
+              }
               return cleanOcrResponse(fullStreamedText);
             }
             // Empty stream: model returned no text - try fallback format

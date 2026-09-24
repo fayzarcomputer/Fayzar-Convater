@@ -10,6 +10,7 @@
     DOC_TYPES: {
       EXAM_COMBINED: 'EXAM_COMBINED',
       EXAM_CQ: 'EXAM_CQ',
+      EXAM_GENERAL: 'EXAM_GENERAL',
       EXAM_MCQ: 'EXAM_MCQ',
       EXAM_MATH: 'EXAM_MATH',
       STAMP_DEED: 'STAMP_DEED',
@@ -18,6 +19,7 @@
       ADMIT_CARD: 'ADMIT_CARD',
       SALARY_SLIP: 'SALARY_SLIP',
       OFFICE_PAD: 'OFFICE_PAD',
+      OFFICIAL_NOTICE: 'OFFICIAL_NOTICE',
       ROUTINE: 'ROUTINE',
       CV_RESUME: 'CV_RESUME',
       GENERAL: 'GENERAL'
@@ -26,6 +28,57 @@
     classify(text) {
       if (!text || typeof text !== 'string') return { type: this.DOC_TYPES.GENERAL, confidence: 0 };
       const t = text.trim();
+
+      // 0. EXPLICIT MASTER SECTOR ID (Highest Priority: Zero-hallucination Frontmatter / Tag)
+      const frontmatterMatch = t.match(/^---\s*[\r\n]([\s\S]*?)[\r\n]---/);
+      let detectedDocType = '';
+      if (frontmatterMatch) {
+        const fmStr = frontmatterMatch[1];
+        const dtMatch = fmStr.match(/(?:doc_type|type|layout)\s*:\s*([^\r\n]+)/i);
+        if (dtMatch) detectedDocType = dtMatch[1].trim().toUpperCase();
+      }
+      if (!detectedDocType) {
+        const tagMatch = t.match(/\[(?:LAYOUT|DOC_PROFILE):\s*([^\]]+)\]/i);
+        if (tagMatch) {
+          const raw = tagMatch[1];
+          const typePart = raw.split('|').find(p => /(?:doc_type|type)\s*[:=]/i.test(p));
+          if (typePart) {
+            detectedDocType = typePart.split(/[:=]/)[1].trim().toUpperCase();
+          } else {
+            detectedDocType = raw.split('|')[0].trim().toUpperCase();
+          }
+        }
+      }
+
+      if (detectedDocType) {
+        if (detectedDocType === 'EXAM_GENERAL' || detectedDocType === 'GENERAL_EXAM' || detectedDocType === 'QUESTION_2COL' || detectedDocType === 'PRIMARY_EXAM') {
+          return { type: this.DOC_TYPES.EXAM_GENERAL, confidence: 1.0, reason: 'Sector: EXAM_GENERAL' };
+        }
+        if (detectedDocType === 'EXAM_CQ' || detectedDocType === 'CREATIVE_EXAM' || detectedDocType === 'CQ_BOOKLET') {
+          return { type: this.DOC_TYPES.EXAM_CQ, confidence: 1.0, reason: 'Sector: EXAM_CQ' };
+        }
+        if (detectedDocType === 'EXAM_MCQ' || detectedDocType === 'MCQ_EXAM' || detectedDocType === 'MCQ_2COL') {
+          return { type: this.DOC_TYPES.EXAM_MCQ, confidence: 1.0, reason: 'Sector: EXAM_MCQ' };
+        }
+        if (detectedDocType === 'EXAM_COMBINED' || detectedDocType === 'COMBINED_EXAM') {
+          return { type: this.DOC_TYPES.EXAM_COMBINED, confidence: 1.0, reason: 'Sector: EXAM_COMBINED' };
+        }
+        if (detectedDocType === 'OFFICE_PAD' || detectedDocType === 'PAD') {
+          return { type: this.DOC_TYPES.OFFICE_PAD, confidence: 1.0, reason: 'Sector: OFFICE_PAD' };
+        }
+        if (detectedDocType === 'PROTTOYON_CERT' || detectedDocType === 'PROTTOYON' || detectedDocType === 'TESTIMONIAL_CERT') {
+          return { type: this.DOC_TYPES.PROTTOYON, confidence: 1.0, reason: 'Sector: PROTTOYON' };
+        }
+        if (detectedDocType === 'GOVT_APP' || detectedDocType === 'APPLICATION') {
+          return { type: this.DOC_TYPES.GOVT_APP, confidence: 1.0, reason: 'Sector: GOVT_APP' };
+        }
+        if (detectedDocType === 'OFFICIAL_NOTICE' || detectedDocType === 'NOTICE') {
+          return { type: this.DOC_TYPES.GENERAL, confidence: 1.0, reason: 'Sector: OFFICIAL_NOTICE' };
+        }
+        if (detectedDocType === 'LEGAL_DEED' || detectedDocType === 'STAMP_DEED' || detectedDocType === 'DEED') {
+          return { type: this.DOC_TYPES.STAMP_DEED, confidence: 1.0, reason: 'Sector: LEGAL_DEED' };
+        }
+      }
 
       // Count questions and MCQ clusters
       const totalQuestionMatches = t.match(/^[০-৯0-9]+[।\.\)]\s/gm) || [];
@@ -55,13 +108,16 @@
       let padScore = 0;
       let routineScore = 0;
 
-      // STRICT MCQ GATE: Only classify as EXAM_MCQ if document contains 20-30 MCQs or all questions are MCQs!
-      if (/সৃজনশীল/i.test(t)) {
+      // STRICT CQ vs GENERAL GATE:
+      // A document is ONLY EXAM_CQ if it explicitly contains 'সৃজনশীল' or 'উদ্দীপক' or has 4-tier sub-questions with marks!
+      if (/সৃজনশীল|উদ্দীপক|দৃশ্যকল্প/i.test(t)) {
         cqScore += 30;
       } else if (isStrictMcq) {
         mcqScore += 35; // Pure MCQ paper
       } else if (/শ্রেণি|বিষয়|সময়|পূর্ণমান|পরীক্ষা/.test(t) || totalQCount > 0) {
-        cqScore += 25; // Standard 2-column question paper (Class 1-5 / short questions)
+        // Standard 2-column general question paper (Class 1-5 / short questions / primary)
+        // Classified as EXAM_GENERAL so it NEVER gets forced into CQ!
+        return { type: this.DOC_TYPES.EXAM_GENERAL, confidence: 0.85, reason: 'সাধারণ/প্রাথমিক প্রশ্নপত্র' };
       }
 
       if (/ক\.\s*[^\n]+\s*খ\.\s*[^\n]+\s*গ\./.test(t) && !/সৃজনশীল/.test(t)) {

@@ -29,7 +29,7 @@
       const metadata = Object.assign({}, frontmatter, defaultOptions);
 
       // 1b. Detect Document & Question Archetype so rules never get confused
-      const profile = MdLayoutParser.detectDocumentProfile(markdownText);
+      const profile = MdLayoutParser.detectDocumentProfile(markdownText, metadata);
 
       // 2. Determine template / layout settings
       const templateId = (profile.hasCombinedSections || profile.archetypeId === 'bengali_combined_exam_paper')
@@ -63,7 +63,7 @@
     /**
      * Identifies the exact document and question archetype so rules never get mixed up
      */
-    static detectDocumentProfile(text) {
+    static detectDocumentProfile(text, metadata = {}) {
       if (!text || !text.trim()) {
         return {
           archetypeId: 'bengali_general_doc',
@@ -83,6 +83,149 @@
       const bnCharCount = (text.match(/[\u0980-\u09FF]/g) || []).length;
       const totalLetterCount = (text.match(/[a-zA-Z\u0980-\u09FF]/g) || []).length;
       const isPureEnglish = (totalLetterCount > 20 && (bnCharCount / totalLetterCount) < 0.05);
+
+      // 0a. MASTER SECTOR PROFILE MAPPING (From Universal Frontmatter or Profile Tag)
+      const docType = (metadata && (metadata.doc_type || metadata.docType || metadata.type || metadata.layoutTag))
+        ? String(metadata.doc_type || metadata.docType || metadata.type || metadata.layoutTag).toUpperCase().trim()
+        : '';
+
+      if (docType === 'EXAM_GENERAL' || docType === 'GENERAL_EXAM' || docType === 'QUESTION_2COL' || docType === 'PRIMARY_EXAM') {
+        return {
+          archetypeId: 'bengali_standard_question_paper',
+          name: 'বাংলা সাধারণ/প্রাথমিক প্রশ্নপত্র (২-কলাম)',
+          reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_GENERAL',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: isPureEnglish ? '.' : '।',
+          hangingIndentDxa: 360,
+          subIndentDxa: 720,
+          columns: metadata && metadata.columns ? parseInt(metadata.columns, 10) : 2,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'EXAM_CQ' || docType === 'CREATIVE_EXAM' || docType === 'CQ_BOOKLET') {
+        return {
+          archetypeId: 'bengali_cq_paper',
+          name: 'বাংলা সৃজনশীল প্রশ্নপত্র (CQ)',
+          reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_CQ',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '।',
+          hangingIndentDxa: 432,
+          subIndentDxa: 864,
+          columns: 2,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'EXAM_MCQ' || docType === 'MCQ_EXAM' || docType === 'MCQ_2COL') {
+        return {
+          archetypeId: 'bengali_mcq_paper',
+          name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
+          reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_MCQ',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '।',
+          hangingIndentDxa: 360,
+          subIndentDxa: 0,
+          columns: 2,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'EXAM_COMBINED' || docType === 'COMBINED_EXAM') {
+        return {
+          archetypeId: 'bengali_combined_exam_paper',
+          name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
+          reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_COMBINED',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '।',
+          hangingIndentDxa: 432,
+          subIndentDxa: 864,
+          columns: 1,
+          hasCombinedSections: true,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'OFFICE_PAD' || docType === 'PAD') {
+        return {
+          archetypeId: 'office_pad',
+          name: 'প্রাতিষ্ঠানিক প্যাড ও অফিশিয়াল পত্র',
+          reason: 'ফ্রন্টম্যাটার Sector ID: OFFICE_PAD',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '.',
+          hangingIndentDxa: 0,
+          subIndentDxa: 360,
+          columns: 1,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'PROTTOYON_CERT' || docType === 'PROTTOYON' || docType === 'TESTIMONIAL_CERT') {
+        return {
+          archetypeId: 'testimonial_cert',
+          name: 'চারিত্রিক প্রত্যয়নপত্র ও প্রশংসাপত্র',
+          reason: 'ফ্রন্টম্যাটার Sector ID: PROTTOYON_CERT',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '.',
+          hangingIndentDxa: 0,
+          subIndentDxa: 360,
+          columns: 1,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'GOVT_APP' || docType === 'APPLICATION') {
+        return {
+          archetypeId: 'govt_application',
+          name: 'সরকারি ও চাকরির আবেদনপত্র',
+          reason: 'ফ্রন্টম্যাটার Sector ID: GOVT_APP',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '.',
+          hangingIndentDxa: 0,
+          subIndentDxa: 360,
+          columns: 1,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'OFFICIAL_NOTICE' || docType === 'NOTICE') {
+        return {
+          archetypeId: 'official_notice_memo',
+          name: 'অফিসিয়াল নোটিশ ও স্মারক',
+          reason: 'ফ্রন্টম্যাটার Sector ID: OFFICIAL_NOTICE',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '.',
+          hangingIndentDxa: 0,
+          subIndentDxa: 360,
+          columns: 1,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
+      if (docType === 'LEGAL_DEED' || docType === 'DEED') {
+        return {
+          archetypeId: 'legal_deed_contract',
+          name: 'আইনি দলিল ও চুক্তিপত্র',
+          reason: 'ফ্রন্টম্যাটার Sector ID: LEGAL_DEED',
+          isPureEnglish: isPureEnglish,
+          fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+          numberingDelimiter: '.',
+          hangingIndentDxa: 0,
+          subIndentDxa: 360,
+          columns: 1,
+          stampMarginInches: metadata && metadata.stampMarginInches ? parseFloat(metadata.stampMarginInches) : 3.5,
+          tableStyle: 'plain_compact',
+          stripAuditNotes: true
+        };
+      }
 
       // User Mandate: Count genuine MCQ questions vs total main questions
       let totalQuestions = 0;
@@ -454,11 +597,29 @@
         }
       }
 
-      // Explicit Vision Layout Tag extraction & clean stripping from body
-      const tagMatch = body.match(/^\s*\[LAYOUT:\s*([A-Za-z0-9_\-]+)\]\s*[\r\n]?/im);
+      // Explicit Vision Layout Tag / Profile extraction & clean stripping from body
+      const tagMatch = body.match(/^\s*\[(?:LAYOUT|DOC_PROFILE):\s*([^\]]+)\]\s*[\r\n]?/im);
       if (tagMatch) {
-        frontmatter.layoutTag = tagMatch[1].toUpperCase();
-        body = body.replace(/^\s*\[LAYOUT:\s*[A-Za-z0-9_\-]+\]\s*[\r\n]?/im, '').trim();
+        const rawContent = tagMatch[1];
+        if (rawContent.includes('|') || rawContent.includes(':') || rawContent.includes('=')) {
+          const parts = rawContent.split('|');
+          for (const part of parts) {
+            const p = part.trim();
+            if (p.includes(':') || p.includes('=')) {
+              const sep = p.includes(':') ? ':' : '=';
+              const k = p.split(sep)[0].trim().toLowerCase();
+              const v = p.split(sep)[1].trim();
+              if (k === 'type' || k === 'doc_type') frontmatter.doc_type = v.toUpperCase();
+              if (k === 'grade') frontmatter.grade = v;
+              if (k === 'columns') frontmatter.columns = v;
+            } else if (!frontmatter.layoutTag) {
+              frontmatter.layoutTag = p.toUpperCase();
+            }
+          }
+        } else {
+          frontmatter.layoutTag = rawContent.trim().toUpperCase();
+        }
+        body = body.replace(/^\s*\[(?:LAYOUT|DOC_PROFILE):[^\]]+\]\s*[\r\n]?/im, '').trim();
       }
 
       // Smart Header Extractor: If institute is missing, extract from the start of body
@@ -490,56 +651,59 @@
         }
 
         if (inHeader) {
-          // Stop header extraction if first question, heading, or category division begins
-          if (/^[০-৯0-9]+[।\.\)]\s/.test(line) || /^#{1,6}\s/.test(line) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(line) || /^Part\s*[-–—:]/i.test(line)) {
+          const cleanLine = line.replace(/^[\*\#\-\s]+/, '').trim();
+          // Stop header extraction if first question, category division, or part begins
+          if (/^[০-৯0-9]+[।\.\)]\s/.test(cleanLine) || /^(?:ক|খ|গ|ঘ|ঙ|চ)\-বিভাগ/i.test(cleanLine) || /^Part\s*[-–—:]/i.test(cleanLine)) {
             inHeader = false;
             bodyLines.push(line);
             continue;
           }
 
-          if (!metadata.institute && /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|মাদ্রাসা|ইনস্টিটিউট|School|College|Academy|University)/i.test(line)) {
-            metadata.institute = line;
+          if (!metadata.institute && /(?:স্কুল|বিদ্যালয়|মডেল|কলেজ|মাদরাসা|মাদ্রাসা|ইনস্টিটিউট|School|College|Academy|University)/i.test(cleanLine)) {
+            metadata.institute = cleanLine;
             continue;
           }
-          if (!metadata.exam && /(?:পরীক্ষা|সেমিস্টার|মূল্যায়ন|Exam|Examination|Test)/i.test(line)) {
-            metadata.exam = line;
+          if (!metadata.exam && /(?:পরীক্ষা|সেমিস্টার|মূল্যায়ন|Exam|Examination|Test)/i.test(cleanLine)) {
+            metadata.exam = cleanLine;
             continue;
           }
-          if (!metadata.subjectCode && /(?:বিষয়\s*কোড|Subject\s*Code)\s*[:\-]?\s*([০-৯0-9]+)/i.test(line)) {
-            const m = line.match(/(?:বিষয়\s*কোড|Subject\s*Code)\s*[:\-]?\s*([০-৯0-9]+)/i);
-            metadata.subjectCode = m[1];
-            continue;
-          }
-          if (!metadata.grade && /(?:শ্রেণি|Class)\s*[:\-]?\s*([^|\n\r]+)/i.test(line)) {
-            const m = line.match(/(?:শ্রেণি|Class)\s*[:\-]?\s*([^|\n\r]+)/i);
+          if (!metadata.grade && /(?:শ্রেণি|Class)\s*[:\-]?\s*([^|\n\r]+)/i.test(cleanLine)) {
+            const m = cleanLine.match(/(?:শ্রেণি|Class)\s*[:\-]?\s*([^|\n\r]+)/i);
             metadata.grade = m[1].trim();
-            const subjMatch = line.match(/(?:বিষয়|Subject)\s*[:\-]?\s*([^|\n\r]+)/i);
+            const subjMatch = cleanLine.match(/(?:বিষয়|Subject)\s*[:\-]?\s*([^|\n\r]+)/i);
             if (subjMatch) metadata.subject = subjMatch[1].trim();
+            const scMatch = cleanLine.match(/(?:বিষয়\s*কোড|Subject\s*Code)\s*[:\-]?\s*([০-৯0-9]+)/i);
+            if (scMatch) metadata.subjectCode = scMatch[1];
             continue;
           }
-          if (!metadata.subject && /(?:বিষয়|Subject)\s*[:\-]?\s*([^|\n\r]+)/i.test(line)) {
-            const m = line.match(/(?:বিষয়|Subject)\s*[:\-]?\s*([^|\n\r]+)/i);
-            metadata.subject = m[1].trim();
+          if (/(?:বিষয়|Subject)/i.test(cleanLine)) {
+            const scMatch = cleanLine.match(/(?:বিষয়\s*কোড|Subject\s*Code)\s*[:\-]?\s*([০-৯0-9]+)/i);
+            if (scMatch && !metadata.subjectCode) metadata.subjectCode = scMatch[1];
+
+            let subjRemainder = cleanLine;
+            if (scMatch) subjRemainder = subjRemainder.replace(scMatch[0], '').trim();
+            const subjMatch = subjRemainder.match(/(?:বিষয়|Subject)\s*[:\-]?\s*([^|\n\r]+)/i);
+            if (subjMatch && !metadata.subject) metadata.subject = subjMatch[1].trim();
             continue;
           }
-          if (!metadata.time && /(?:সময়|Time)\s*[:\-]?\s*([^|\n\r]+)/i.test(line)) {
-            const m = line.match(/(?:সময়|Time)\s*[:\-]?\s*([^|\n\r]+)/i);
-            metadata.time = m[1].trim();
-            const marksMatch = line.match(/(?:পূর্ণমান|Full\s*Marks|Marks)\s*[:\-]?\s*([^|\n\r]+)/i);
-            if (marksMatch) metadata.fullMarks = marksMatch[1].trim();
+          if (/(?:সময়|Time|পূর্ণমান|Full\s*Marks)/i.test(cleanLine)) {
+            const tMatch = cleanLine.match(/(?:সময়|Time)\s*[:\-]?\s*([^;,\n|]+?)(?=(?:পূর্ণমান|সৃজনশীল|বহুনির্বাচন|$))/i);
+            if (tMatch && !metadata.time) metadata.time = tMatch[1].trim();
+
+            const mMatch = cleanLine.match(/(?:পূর্ণমান|Full\s*Marks|Marks|মান)\s*[:\-]?\s*([^;,\n|]+)/i);
+            if (mMatch && !metadata.fullMarks) metadata.fullMarks = mMatch[1].trim();
+
+            const subHMatch = cleanLine.match(/(?:সৃজনশীল\s*অভীক্ষা|বহুনির্বাচনি\s*অভীক্ষা|রচনামূলক)/i);
+            if (subHMatch && !metadata.subHeader) metadata.subHeader = subHMatch[0].trim();
+
             continue;
           }
-          if (!metadata.fullMarks && /(?:পূর্ণমান|Full\s*Marks|Marks)\s*[:\-]?\s*([^|\n\r]+)/i.test(line)) {
-            const m = line.match(/(?:পূর্ণমান|Full\s*Marks|Marks)\s*[:\-]?\s*([^|\n\r]+)/i);
-            metadata.fullMarks = m[1].trim();
+          if (!metadata.subHeader && /(?:সৃজনশীল\s*অভীক্ষা|বহুনির্বাচনি\s*অভীক্ষা|রচনামূলক)/i.test(cleanLine)) {
+            metadata.subHeader = cleanLine;
             continue;
           }
-          if (!metadata.subHeader && /(?:সৃজনশীল\s*অভীক্ষা|বহুনির্বাচনি\s*অভীক্ষা|রচনামূলক)/i.test(line)) {
-            metadata.subHeader = line;
-            continue;
-          }
-          if (!metadata.note && /^(?:\[?বিশেষ\s*দ্রষ্টব্য|\[\s*নোট|\bদ্রষ্টব্য)/i.test(line)) {
-            metadata.note = line;
+          if (!metadata.note && /^(?:\[?বিশেষ\s*দ্রষ্টব্য|\[\s*নোট|\bদ্রষ্টব্য)/i.test(cleanLine)) {
+            metadata.note = cleanLine;
             continue;
           }
 
@@ -562,7 +726,7 @@
       let isInMcqSection = false;
 
       while (i < lines.length) {
-        const line = lines[i].trim();
+        let line = lines[i].trim();
 
         // Skip empty lines
         if (!line) {
@@ -703,21 +867,27 @@
           continue;
         }
 
-        // Headings (#, ##, ###, ####)
+        // Headings (#, ##, ###, ####) or Question with markdown heading (e.g. ## ১।, ## 1.)
         const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
         if (headingMatch) {
           const hText = headingMatch[2].trim();
-          if (/(?:বহুনির্বাচন|নৈর্ব্যক্তিক|MCQ)/i.test(hText)) {
-            isInMcqSection = true;
-            blocks.push({ type: 'section_break', layout: '2_column', target: 'mcq' });
+          // If the heading is actually a Question Number (e.g. ## ১।, ## 1., ## ১):
+          const qHeadingMatch = hText.match(/^([০-৯0-9]+)\s*([।\.\|\)\:\-])(?:\s*(.*))?$/);
+          if (qHeadingMatch) {
+            line = hText; // Strips the ## and falls through to Question Item parser!
+          } else {
+            if (/(?:বহুনির্বাচন|নৈর্ব্যক্তিক|MCQ)/i.test(hText)) {
+              isInMcqSection = true;
+              blocks.push({ type: 'section_break', layout: '2_column', target: 'mcq' });
+            }
+            blocks.push({
+              type: 'heading',
+              level: headingMatch[1].length,
+              text: hText
+            });
+            i++;
+            continue;
           }
-          blocks.push({
-            type: 'heading',
-            level: headingMatch[1].length,
-            text: hText
-          });
-          i++;
-          continue;
         }
 
         // Blockquote / Stimulus Box (> ...)
