@@ -45,40 +45,29 @@
         if (!str) return '';
         if (isPureEnglish) return str;
         if (isBijoy) {
-          const romanRegex = /\b(i{1,3}|iv|v|vi{0,3}|ix|x)\b/gi;
-          const s = String(str);
-          if (!romanRegex.test(s)) {
-            if (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function') {
-              return BanglaConverter.unicodeToBijoy(s);
-            }
-            if (typeof BanglaConverterEngine !== 'undefined' && typeof BanglaConverterEngine.convertUnicodeToBijoy === 'function') {
-              return BanglaConverterEngine.convertUnicodeToBijoy(s);
-            }
-            return s;
+          // If already converted to Bijoy, do not touch or split
+          if (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.isBijoyText === 'function' && BanglaConverter.isBijoyText(str)) {
+            return str;
           }
-          romanRegex.lastIndex = 0;
-          const tokens = [];
-          let lastIdx = 0;
-          let m;
-          while ((m = romanRegex.exec(s)) !== null) {
-            if (m.index > lastIdx) {
-              const before = s.slice(lastIdx, m.index);
-              const cvted = (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function')
-                ? BanglaConverter.unicodeToBijoy(before)
-                : before;
-              tokens.push(cvted);
-            }
-            tokens.push(`<span style="font-family:'Times New Roman',serif;">${m[1]}</span>`);
-            lastIdx = m.index + m[0].length;
+          if (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.splitMixedBengaliAndEnglish === 'function') {
+            const segs = BanglaConverter.splitMixedBengaliAndEnglish(String(str));
+            return segs.map(seg => {
+              if (seg.type === 'english') {
+                return `<span style="font-family:'Times New Roman',serif;">${seg.text}</span>`;
+              } else {
+                return (typeof BanglaConverter.unicodeToBijoy === 'function')
+                  ? BanglaConverter.unicodeToBijoy(seg.text)
+                  : seg.text;
+              }
+            }).join('');
           }
-          if (lastIdx < s.length) {
-            const after = s.slice(lastIdx);
-            const cvted = (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function')
-              ? BanglaConverter.unicodeToBijoy(after)
-              : after;
-            tokens.push(cvted);
+          if (typeof BanglaConverter !== 'undefined' && typeof BanglaConverter.unicodeToBijoy === 'function') {
+            return BanglaConverter.unicodeToBijoy(str);
           }
-          return tokens.join('');
+          if (typeof BanglaConverterEngine !== 'undefined' && typeof BanglaConverterEngine.convertUnicodeToBijoy === 'function') {
+            return BanglaConverterEngine.convertUnicodeToBijoy(str);
+          }
+          return str;
         }
         return str;
       };
