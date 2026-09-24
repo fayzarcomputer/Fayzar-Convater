@@ -517,9 +517,17 @@
         for (const seg of segments) {
           if (seg.type === 'math') {
             let mVal = seg.value.trim().replace(/\\rightarrow\b|\\to\b/g, '→');
-            mVal = mVal.replace(/([a-zA-Z0-9]+)_\{?([0-9a-zA-Z]+)\}?/g, '$1<sub>$2</sub>');
-            mVal = mVal.replace(/([a-zA-Z0-9]+)\^\{?([0-9a-zA-Z]+)\}?/g, '$1<sup>$2</sup>');
-            out += mVal;
+            // Apply full symbol map (set theory, Greek, etc.)
+            if (typeof EqConv.cleanLatexSymbols === 'function') {
+              mVal = EqConv.cleanLatexSymbols(mVal);
+            }
+            // Superscript / subscript
+            mVal = mVal.replace(/([a-zA-Z0-9}])\^{([^}]+)}/g, '$1<sup>$2</sup>');
+            mVal = mVal.replace(/([a-zA-Z0-9}])\^([a-zA-Z0-9])/g, '$1<sup>$2</sup>');
+            mVal = mVal.replace(/([a-zA-Z0-9}])_\{([^}]+)\}/g, '$1<sub>$2</sub>');
+            mVal = mVal.replace(/([a-zA-Z0-9}])_([a-zA-Z0-9])/g, '$1<sub>$2</sub>');
+            // Wrap in italic Times New Roman (standard math style)
+            out += `<span style="font-family:'Times New Roman',serif;font-style:italic;">${mVal}</span>`;
           } else {
             out += cvt(seg.value);
           }
@@ -799,7 +807,8 @@
 ${orientCss}\tmargin:${mTop} ${mRight} ${mBottom} ${mLeft};
 \tmso-header-margin:36.0pt;
 \tmso-footer-margin:36.0pt;
-${colCss}${sepCss}\tmso-paper-source:0;}`);
+${colCss}${sepCss}\tmso-paper-source:0;
+\tmso-forms-protection:no;}`);
 
         divStyles.push(` div.Section${sNum}
 \t{page:Section${sNum};}`);
@@ -818,6 +827,10 @@ ${colCss}${sepCss}\tmso-paper-source:0;}`);
         const stamp = (idx === 0 && stampGapHtml) ? stampGapHtml : '';
         return `${breakTag}<div class="Section${sNum}">\n${stamp}${colBreakTag}${sec.html}\n</div>`;
       }).join('\n');
+
+      const isBijoyFont = fontFamily === 'SutonnyMJ';
+      const bodyLang = isBijoyFont ? 'EN-US' : 'BN';
+      const msoAnsiLang = isBijoyFont ? 'EN-US' : 'BN-BD';
 
       return `<!DOCTYPE html>
 <html xmlns:v="urn:schemas-microsoft-com:vml"
@@ -842,6 +855,10 @@ ${colCss}${sepCss}\tmso-paper-source:0;}`);
   <w:Zoom>100</w:Zoom>
   <w:SpellingState>Clean</w:SpellingState>
   <w:GrammarState>Clean</w:GrammarState>
+  <w:ProtectForms>false</w:ProtectForms>
+  <w:DontTrackRevisions/>
+  <w:DoNotEmbedSystemFonts/>
+  <w:DontPromoteQF/>
   <w:Compatibility>
    <w:BreakWrappedTables/>
    <w:SnapToGridInCell/>
@@ -868,6 +885,8 @@ ${colCss}${sepCss}\tmso-paper-source:0;}`);
    mso-ascii-font-family: "${fontFamily}";
    mso-hansi-font-family: "${fontFamily}";
    mso-bidi-font-family: "${fontFamily}";
+   mso-fareast-font-family: "${fontFamily}";
+   mso-ansi-language: ${msoAnsiLang};
  }
  table.MsoNormalTable {
    border-collapse: collapse;
@@ -880,6 +899,7 @@ ${divStyles.join('\n')}
    font-size: 12.0pt;
    color: #000000;
    background: #ffffff;
+   mso-ansi-language: ${msoAnsiLang};
  }
  p, div, td, th {
    font-family: "${fontFamily}", Arial, sans-serif;
@@ -887,6 +907,8 @@ ${divStyles.join('\n')}
    mso-ascii-font-family: "${fontFamily}";
    mso-hansi-font-family: "${fontFamily}";
    mso-bidi-font-family: "${fontFamily}";
+   mso-fareast-font-family: "${fontFamily}";
+   mso-ansi-language: ${msoAnsiLang};
  }
  table {
    border-collapse: collapse;
@@ -895,7 +917,7 @@ ${divStyles.join('\n')}
 -->
 </style>
 </head>
-<body lang="BN">
+<body lang="${bodyLang}">
 ${bodyDivs}
 </body>
 </html>`;
