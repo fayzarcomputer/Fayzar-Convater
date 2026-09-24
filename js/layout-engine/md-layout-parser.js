@@ -577,20 +577,46 @@
      * Extracts YAML frontmatter between leading '---' delimiters or smart extracts from plain text
      */
     static extractFrontmatter(text) {
-      const match = text.match(/^\s*---\s*[\r\n]([\s\S]*?)[\r\n]---\s*[\r\n]?([\s\S]*)$/);
+      // Try standard closed frontmatter: ---\n...\n---
+      let match = text.match(/^\s*---\s*[\r\n]([\s\S]*?)[\r\n]---\s*[\r\n]?([\s\S]*)$/);
+      // Also try unclosed frontmatter: ---\n<key:val lines>\n<non-key line starts body>
+      if (!match) {
+        match = text.match(/^\s*---\s*[\r\n]([\s\S]*?)(?=\n[^\s#:][^\n]*\n|$)/);
+        if (match) {
+          // Re-split: frontmatter is lines starting with optional ## and containing ':'
+          const lines = text.replace(/^\s*---\s*\n/, '').split(/\r?\n/);
+          let yamlLines = [];
+          let bodyStart = 0;
+          for (let i = 0; i < lines.length; i++) {
+            const stripped = lines[i].replace(/^#+\s*/, '').trim();
+            if (stripped.includes(':') && /^[a-zA-Z_]/.test(stripped)) {
+              yamlLines.push(stripped);
+              bodyStart = i + 1;
+            } else if (stripped === '' && i < 3) {
+              bodyStart = i + 1; // skip blank lines in header
+            } else {
+              break;
+            }
+          }
+          match = [null, yamlLines.join('\n'), lines.slice(bodyStart).join('\n')];
+        }
+      }
+
       let frontmatter = {};
       let body = text.trim();
 
       if (match) {
         const yamlStr = match[1];
-        body = match[2].trim();
+        body = (match[2] || '').trim();
         const lines = yamlStr.split(/\r?\n/);
         for (const line of lines) {
-          const colonIdx = line.indexOf(':');
+          // Strip leading markdown heading markers: ## doc_type: → doc_type:
+          const cleanLine = line.replace(/^#+\s*/, '').trim();
+          const colonIdx = cleanLine.indexOf(':');
           if (colonIdx > 0) {
-            const key = line.slice(0, colonIdx).trim();
-            const val = line.slice(colonIdx + 1).trim();
-            if (key) {
+            const key = cleanLine.slice(0, colonIdx).trim();
+            const val = cleanLine.slice(colonIdx + 1).trim();
+            if (key && /^[a-zA-Z_]/.test(key)) {
               frontmatter[key] = val.replace(/^["']|["']$/g, '');
             }
           }

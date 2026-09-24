@@ -1141,7 +1141,7 @@
 	margin:${page.marginTop} ${page.marginRight} ${page.marginBottom} ${page.marginLeft};
 	mso-header-margin:.5in;
 	mso-footer-margin:.5in;
-	mso-paper-source:0;}
+${page.cols >= 2 ? `\tmso-columns:${page.cols} even 0.2in;\n\tmso-column-separator:solid;\n` : ''}	mso-paper-source:0;}
  div.Section1
 	{page:Section1;}
 -->
