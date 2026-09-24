@@ -2818,6 +2818,18 @@ function initUnifiedConverterEngine() {
   executeAiConversionBtn?.addEventListener('click', async () => {
     if (!currentScanResult || !currentScanResult.isAiOcr) return;
 
+    // Guard: if already processing, do not start again
+    if (window.FayzarAiOcrEngine && window.FayzarAiOcrEngine.state && window.FayzarAiOcrEngine.state.isProcessing) {
+      if (typeof window.showToastNotification === 'function') {
+        window.showToastNotification('রূপান্তর ইতিমধ্যে চলছে, অনুগ্রহ করে অপেক্ষা করুন', 'info');
+      }
+      return;
+    }
+
+    // Reset progress bar to clean state before starting
+    if (wizardProgressBar) wizardProgressBar.style.width = '0%';
+    if (wizardProgressPctText) wizardProgressPctText.textContent = '0%';
+
     step2Box?.classList.add('hidden');
     step3Box?.classList.remove('hidden');
     wizardProgressCard?.classList.remove('hidden');
@@ -2878,7 +2890,7 @@ function initUnifiedConverterEngine() {
       const baseName = currentScanResult.file.name.replace(/\.[^/.]+$/, '');
 
       if (wizardResultFileName) wizardResultFileName.textContent = `${baseName}_Converted`;
-      if (wizardResultStatsBadge) wizardResultStatsBadge.textContent = `ডকুমেন্ট রূপান্তর সফলভাবে সম্পন্ন হয়েছে (৩টি ফরম্যাটেই প্রস্তুত)`;
+      if (wizardResultStatsBadge) wizardResultStatsBadge.textContent = `ডকুমেন্ট রূপান্তর সফলভাবে সম্পন্ন হয়েছে (৩টি ফরম্যাটেই প্রস্তুত)`;
 
       if (wizardDlDocBtn) {
         wizardDlDocBtn.classList.remove('hidden');
@@ -2924,8 +2936,8 @@ function initUnifiedConverterEngine() {
 
       // Show Instant Ready Alert
       if (instantDownloadAlert) {
-        if (instantDownloadTitle) instantDownloadTitle.textContent = `ডকুমেন্ট রূপান্তর সফলভাবে সম্পন্ন হয়েছে!`;
-        if (instantDownloadSubtitle) instantDownloadSubtitle.textContent = `প্রয়োজনে পেজ সেটাপ পরিবর্তন করে নিচের যেকোনো ওয়ার্ড ফরম্যাটে ফাইলটি ডাউনলোড করুন`;
+        if (instantDownloadTitle) instantDownloadTitle.textContent = `ডকুমেন্ট রূপান্তর সফলভাবে সম্পন্ন হয়েছে!`;
+        if (instantDownloadSubtitle) instantDownloadSubtitle.textContent = `প্রয়োজনে পেজ সেটাপ পরিবর্তন করে নিচের যেকোনো ওয়ার্ড ফরম্যাটে ফাইলটি ডাউনলোড করুন`;
         instantDownloadAlert.classList.remove('hidden');
         if (alertTimeout) clearTimeout(alertTimeout);
         alertTimeout = setTimeout(() => instantDownloadAlert.classList.add('hidden'), 7000);
@@ -2933,21 +2945,44 @@ function initUnifiedConverterEngine() {
 
     } catch (err) {
       console.error(err);
+
+      // Force-reset processing state so retry works immediately without page reload
       if (window.FayzarAiOcrEngine && window.FayzarAiOcrEngine.state) {
         window.FayzarAiOcrEngine.state.isProcessing = false;
       }
-      if (err.name === 'AbortError' || (err.message && (err.message.includes('বাতিল') || err.message.includes('aborted') || err.message.includes('abort')))) {
+      // Also call setLoading(false) to re-enable convertBtn and hide progress bar
+      if (window.FayzarAiOcrEngine && typeof window.FayzarAiOcrEngine.setLoading === 'function') {
+        window.FayzarAiOcrEngine.setLoading(false);
+      }
+
+      // Reset progress bar UI
+      if (wizardProgressBar) wizardProgressBar.style.width = '0%';
+      if (wizardProgressPctText) wizardProgressPctText.textContent = '0%';
+
+      const isAbort = err.name === 'AbortError' || (err.message && (err.message.includes('বাতিল') || err.message.includes('aborted') || err.message.includes('abort')));
+      const isTimeout = err.message && (err.message.includes('টাইমআউট') || err.message.includes('timeout') || err.message.includes('সাড়া দেয়নি'));
+
+      if (isAbort) {
         if (typeof window.showToastNotification === 'function') {
-          window.showToastNotification('রূপান্তর বাতিল করা হয়েছে', 'info');
+          window.showToastNotification('রূপান্তর বাতিল করা হয়েছে — পুনরায় চেষ্টা করতে বাটনে ক্লিক করুন', 'info');
+        }
+      } else if (isTimeout) {
+        if (typeof window.showToastNotification === 'function') {
+          window.showToastNotification('⏱ সার্ভার সময়মতো সাড়া দেয়নি — পুনরায় চেষ্টা করুন', 'warning');
         }
       } else {
-        alert('AI রূপান্তর সম্পন্ন করা যায়নি: ' + err.message);
+        if (typeof window.showToastNotification === 'function') {
+          window.showToastNotification('AI রূপান্তর ব্যর্থ: ' + err.message, 'error');
+        }
       }
+
+      // Return to step 2 so user can retry without re-uploading
       step2Box?.classList.remove('hidden');
       step3Box?.classList.add('hidden');
       wizardProgressCard?.classList.add('hidden');
     }
   });
+
 
   // Direct 1-Click Action Buttons (.doc and .docx for Office Files)
   actionConvertDocBtn?.addEventListener('click', async () => {
@@ -3401,19 +3436,24 @@ function initUnifiedConverterEngine() {
         const detectedLayout = detectFn(text);
         const ast = MdLayoutParser.parse(text, { layout: detectedLayout, pageSize });
 
-        // Native Word 2003 Layout Builder (prioritized for full multi-column layout fidelity)
-        if (typeof DocWord2003Builder !== 'undefined') {
-          docBlob = DocWord2003Builder.build(ast, { font: fontName });
-        } else if (typeof DocxLayoutBuilder !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
-          const docxBlob = await DocxLayoutBuilder.build(ast, { font: fontName });
+        // মূল পরীক্ষিত পাইপলাইন: DocxLayoutBuilder (মাস্টার) -> DocxHandler (বিজয় রূপান্তর) -> DocxToDocConverter (.doc)
+        if (typeof DocxLayoutBuilder !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
+          const docxBlob = await DocxLayoutBuilder.build(ast, { font: isU2B ? 'Kalpurush' : fontName });
+          let targetBlob = docxBlob;
+          if (isU2B && typeof DocxHandler !== 'undefined' && typeof DocxHandler.convertDocx === 'function') {
+            const bijoyRes = await DocxHandler.convertDocx(docxBlob, { direction: 'u2b', targetFont: 'SutonnyMJ' });
+            targetBlob = bijoyRes.convertedBlob || bijoyRes.blob;
+          }
           const docxConverter = new DocxToDocConverter();
-          const docResult = await docxConverter.convertDocxToDoc(docxBlob, {
+          const docResult = await docxConverter.convertDocxToDoc(targetBlob, {
             pageSize,
             margin,
             preserveSutonny: (fontName === 'SutonnyMJ'),
             optimizeForQuestionPaper: true
           });
           docBlob = docResult.blob || docResult.convertedBlob;
+        } else if (typeof DocWord2003Builder !== 'undefined') {
+          docBlob = DocWord2003Builder.build(ast, { font: fontName });
         }
       } else if (typeof DocxHandler !== 'undefined') {
         docBlob = DocxHandler.createDocFromText(text, fontName, isU2B, 12, { pageSize, margin });
