@@ -220,6 +220,20 @@
       opts.onProgress(50, 'প্রশ্নপত্র ও সেকশন এক্সএমএল প্রসেসিং হচ্ছে...');
       const bodyElementsXml = [];
 
+      // Dynamic Smart Page-Fit Font Size Adaptation for MCQ
+      // Standard MCQ font size is 12pt (sz: 24). If 1-4 questions overflow,
+      // adapt to 11.5pt (sz: 23) or 11pt (sz: 22) so it fits beautifully without orphan overflow lines.
+      const totalQuestionsCount = parsedAst.blocks.filter(b => b.type === 'question').length;
+      let mcqBodySz = '24';
+      if (layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper' || (layout.profile && layout.profile.archetypeId === 'bengali_mcq_paper')) {
+        if (totalQuestionsCount > 28 && totalQuestionsCount <= 32) {
+          mcqBodySz = '22'; // 11pt
+        } else if (totalQuestionsCount > 25 && totalQuestionsCount <= 28) {
+          mcqBodySz = '23'; // 11.5pt
+        }
+      }
+      layout.effectiveBodySz = mcqBodySz;
+
       for (const block of parsedAst.blocks) {
         bodyElementsXml.push(DocxLayoutBuilder.renderBlockXml(block, isBijoy, isPureEnglish, layout));
       }
@@ -229,9 +243,13 @@
       const sectPrXml = DocxLayoutBuilder.generateSectionProperties(layout);
 
       const archetypeId = (layout.profile && layout.profile.archetypeId) || '';
-      const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper';
-      const isCqPaper = archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq';
-      const isCombined = archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq'));
+      const totalQuestionBlocks = parsedAst.blocks.filter(b => b.type === 'question');
+      const mcqQuestionBlocks = totalQuestionBlocks.filter(q => DocxLayoutBuilder.extractMcqOptions(q.subQuestions) != null);
+      const isDominantMcq = (mcqQuestionBlocks.length >= 10) || (totalQuestionBlocks.length >= 3 && mcqQuestionBlocks.length >= totalQuestionBlocks.length * 0.7);
+
+      const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper' || isDominantMcq;
+      const isCqPaper = !isDominantMcq && (archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq');
+      const isCombined = !isDominantMcq && (archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq')));
       const isStandardQuestionPaper = archetypeId === 'bengali_standard_question_paper' || layout.templateId === 'question-2col' || layout.templateId === 'bengali_standard_question_paper' || layout.templateId === 'bengali-standard-question';
 
       let bodyContentXml = '';
@@ -460,32 +478,58 @@
         return xml;
       }
 
-      // Academic Question Paper Header
-      if (meta.institute) {
+      // Academic Question Paper Header (Render only if meta fields actually exist and are not placeholder text)
+      const isPlaceholder = (txt) => !txt || /^(?:আপনার\s*প্রতিষ্ঠানের?\s*নাম|পরীক্ষার\s*নাম\s*লিখুন|ঠিকানা\s*লিখুন|Class\s*Name|Exam\s*Name)$/i.test(txt.trim());
+
+      if (meta.institute && !isPlaceholder(meta.institute)) {
         xml += `
         <w:p>
-          <w:pPr><w:jc w:val="center"/><w:spacing w:after="40"/></w:pPr>
+          <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="30"/></w:pPr>
           ${renderRuns(meta.institute, true, false, '30')}
         </w:p>`;
       }
 
-      if (meta.exam) {
+      if (meta.address || meta.subHeader) {
+        const addrText = meta.address || meta.subHeader;
+        if (!isPlaceholder(addrText)) {
+          xml += `
+          <w:p>
+            <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="30"/></w:pPr>
+            ${renderRuns(addrText, false, false, '22')}
+          </w:p>`;
+        }
+      }
+
+      if (meta.exam && !isPlaceholder(meta.exam)) {
         xml += `
         <w:p>
-          <w:pPr><w:jc w:val="center"/><w:spacing w:after="60"/></w:pPr>
-          ${renderRuns(meta.exam, true, false, '26')}
+          <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>
+          ${renderRuns(meta.exam, true, false, '25')}
         </w:p>`;
       }
 
-      if (meta.grade || meta.subject) {
-        const gradeText = meta.grade ? (isPureEnglish ? `Class: ${meta.grade}` : `শ্রেণি: ${meta.grade}`) : '';
-        const subjText = meta.subject ? (isPureEnglish ? `Subject: ${meta.subject}` : `বিষয়: ${meta.subject}`) : '';
-        const middle = (gradeText && subjText) ? '  |  ' : '';
+      if (meta.grade) {
+        const gradeLabel = isPureEnglish ? 'Class: ' : 'শ্রেণিঃ ';
         xml += `
         <w:p>
-          <w:pPr><w:jc w:val="center"/><w:spacing w:after="80"/></w:pPr>
-          ${renderRuns(gradeText + middle + subjText, true, false, '24')}
+          <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="30"/></w:pPr>
+          ${renderRuns(gradeLabel + meta.grade, true, false, '23')}
         </w:p>`;
+      }
+
+      if (meta.subject) {
+        // Prevent printing subject twice if grade line already contains subject name
+        const gradeText = String(meta.grade || '');
+        const subjectText = String(meta.subject || '').trim();
+        const alreadyInGrade = gradeText.includes(subjectText) || (gradeText.includes('বিষয়') && gradeText.includes(subjectText.replace(/^বিষয়\s*[:\-]?\s*/, '')));
+        if (!alreadyInGrade) {
+          const subjLabel = isPureEnglish ? 'Subject: ' : 'বিষয়ঃ ';
+          xml += `
+          <w:p>
+            <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>
+            ${renderRuns(subjLabel + meta.subject, true, false, '23')}
+          </w:p>`;
+        }
       }
 
       if (meta.subjectCode) {
@@ -514,10 +558,11 @@
             <w:tblBorders><w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/></w:tblBorders>
           </w:tblPr>
           <w:tr>
-            <w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:after="40"/></w:pPr>${renderRuns(timeText, true, false, '24')}</w:p></w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr><w:p><w:pPr><w:jc w:val="right"/><w:spacing w:after="40"/></w:pPr>${renderRuns(marksText, true, false, '24')}</w:p></w:tc>
+            <w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="20" w:after="30"/></w:pPr>${renderRuns(timeText, true, false, '23')}</w:p></w:tc>
+            <w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr><w:p><w:pPr><w:jc w:val="right"/><w:spacing w:before="20" w:after="30"/></w:pPr>${renderRuns(marksText, true, false, '23')}</w:p></w:tc>
           </w:tr>
-        </w:tbl>`;
+        </w:tbl>
+        <w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr><w:spacing w:after="80"/></w:pPr></w:p>`;
       }
 
       if (meta.note) {
@@ -652,9 +697,9 @@
     /**
      * Formats MCQ options in 4 equal columns (or 2 columns across 2 lines when long)
      */
-    static formatMcqOptionsXml(optionsList, isBijoy, isPureEnglish) {
+    static formatMcqOptionsXml(optionsList, isBijoy, isPureEnglish, bodySz = '24') {
       if (!optionsList || optionsList.length === 0) return '';
-      const renderRuns = (txt, isBold, isItalic, sz = '24', extra = '') => DocxLayoutBuilder.renderSmartRuns(txt, isBijoy, isBold, isItalic, sz, isPureEnglish, extra);
+      const renderRuns = (txt, isBold, isItalic, sz = bodySz, extra = '') => DocxLayoutBuilder.renderSmartRuns(txt, isBijoy, isBold, isItalic, sz, isPureEnglish, extra);
 
       const getVisualLength = (str) => {
         if (!str) return 0;
@@ -664,26 +709,29 @@
       const totalLen = optionsList.reduce((sum, o) => sum + getVisualLength(o.text || ''), 0);
       const maxSingleLen = Math.max(...optionsList.map(o => getVisualLength(o.text || '')));
 
+      // In 2-column layout (each column width ~5100 dxa):
       // 4 Options fit on 1 line across 4 equal columns (short options)
+      // Left indent = 360 dxa (aligned with question text after serial)
+      // Tab 1: 1540 dxa (~77pt), Tab 2: 2720 dxa (~136pt), Tab 3: 3900 dxa (~195pt)
       if (optionsList.length === 4 && totalLen <= 48 && maxSingleLen <= 14) {
         return `
         <w:p>
           <w:pPr>
-            <w:ind w:left="234"/>
+            <w:ind w:left="360"/>
             <w:tabs>
-              <w:tab w:val="left" w:pos="1447"/>
-              <w:tab w:val="left" w:pos="2660"/>
-              <w:tab w:val="left" w:pos="3873"/>
+              <w:tab w:val="left" w:pos="1540"/>
+              <w:tab w:val="left" w:pos="2720"/>
+              <w:tab w:val="left" w:pos="3900"/>
             </w:tabs>
-            <w:spacing w:before="10" w:after="20" w:line="240" w:lineRule="auto"/>
+            <w:spacing w:before="8" w:after="16" w:line="240" w:lineRule="auto"/>
           </w:pPr>
-          ${renderRuns(optionsList[0].label + ' ' + optionsList[0].text, false, false, '24')}
+          ${renderRuns(optionsList[0].label + ' ' + optionsList[0].text, false, false, bodySz)}
           <w:r><w:tab/></w:r>
-          ${renderRuns(optionsList[1].label + ' ' + optionsList[1].text, false, false, '24')}
+          ${renderRuns(optionsList[1].label + ' ' + optionsList[1].text, false, false, bodySz)}
           <w:r><w:tab/></w:r>
-          ${renderRuns(optionsList[2].label + ' ' + optionsList[2].text, false, false, '24')}
+          ${renderRuns(optionsList[2].label + ' ' + optionsList[2].text, false, false, bodySz)}
           <w:r><w:tab/></w:r>
-          ${renderRuns(optionsList[3].label + ' ' + optionsList[3].text, false, false, '24')}
+          ${renderRuns(optionsList[3].label + ' ' + optionsList[3].text, false, false, bodySz)}
         </w:p>`;
       }
 
@@ -692,38 +740,38 @@
         return `
         <w:p>
           <w:pPr>
-            <w:ind w:left="234"/>
+            <w:ind w:left="360"/>
             <w:tabs>
-              <w:tab w:val="left" w:pos="2660"/>
+              <w:tab w:val="left" w:pos="2740"/>
             </w:tabs>
-            <w:spacing w:before="10" w:after="10" w:line="240" w:lineRule="auto"/>
+            <w:spacing w:before="8" w:after="8" w:line="240" w:lineRule="auto"/>
           </w:pPr>
-          ${renderRuns(optionsList[0].label + ' ' + optionsList[0].text, false, false, '24')}
+          ${renderRuns(optionsList[0].label + ' ' + optionsList[0].text, false, false, bodySz)}
           <w:r><w:tab/></w:r>
-          ${renderRuns(optionsList[1].label + ' ' + optionsList[1].text, false, false, '24')}
+          ${renderRuns(optionsList[1].label + ' ' + optionsList[1].text, false, false, bodySz)}
         </w:p>
         <w:p>
           <w:pPr>
-            <w:ind w:left="234"/>
+            <w:ind w:left="360"/>
             <w:tabs>
-              <w:tab w:val="left" w:pos="2660"/>
+              <w:tab w:val="left" w:pos="2740"/>
             </w:tabs>
-            <w:spacing w:before="10" w:after="20" w:line="240" w:lineRule="auto"/>
+            <w:spacing w:before="8" w:after="16" w:line="240" w:lineRule="auto"/>
           </w:pPr>
-          ${renderRuns(optionsList[2].label + ' ' + optionsList[2].text, false, false, '24')}
+          ${renderRuns(optionsList[2].label + ' ' + optionsList[2].text, false, false, bodySz)}
           <w:r><w:tab/></w:r>
-          ${renderRuns(optionsList[3].label + ' ' + optionsList[3].text, false, false, '24')}
+          ${renderRuns(optionsList[3].label + ' ' + optionsList[3].text, false, false, bodySz)}
         </w:p>`;
       }
 
-      // Very long options: each on its own line
+      // Very long options: each on its own line across 1 column
       return optionsList.map(opt => `
       <w:p>
         <w:pPr>
-          <w:ind w:left="234"/>
-          <w:spacing w:before="10" w:after="10" w:line="240" w:lineRule="auto"/>
+          <w:ind w:left="360"/>
+          <w:spacing w:before="8" w:after="8" w:line="240" w:lineRule="auto"/>
         </w:pPr>
-        ${renderRuns(opt.label + ' ' + opt.text, false, false, '24')}
+        ${renderRuns(opt.label + ' ' + opt.text, false, false, bodySz)}
       </w:p>`).join('\n');
     }
 
@@ -731,7 +779,8 @@
      * Render an individual AST block to Word XML
      */
     static renderBlockXml(block, isBijoy, isPureEnglish, layout = {}) {
-      const renderRuns = (txt, isBold, isItalic, sz = '24', extra = '') => DocxLayoutBuilder.renderSmartRuns(txt, isBijoy, isBold, isItalic, sz, isPureEnglish, extra);
+      const bodySz = layout && layout.effectiveBodySz ? layout.effectiveBodySz : '24';
+      const renderRuns = (txt, isBold, isItalic, sz = bodySz, extra = '') => DocxLayoutBuilder.renderSmartRuns(txt, isBijoy, isBold, isItalic, sz, isPureEnglish, extra);
 
       const is2Col = layout && layout.columns === 2;
       const isLegal = layout && layout.pageSize === 'legal';
@@ -758,6 +807,10 @@
         }
 
         case 'heading': {
+          const rawHText = (block.text || '').trim();
+          if (/^(?:আপনার\s*প্রতিষ্ঠানের?\s*নাম|ঠিকানা\s*লিখুন|পরীক্ষার\s*নাম\s*লিখুন)$/i.test(rawHText)) {
+            return '';
+          }
           const sz = block.level === 1 ? '26' : '24';
           return `
           <w:p>
@@ -791,14 +844,15 @@
           // If MCQ Section has header metadata, render it centered across the full page!
           if (block.mcqHeader) {
             const h = block.mcqHeader;
-            if (h.institute) {
+            const isPlaceholder = (txt) => !txt || /^(?:আপনার\s*প্রতিষ্ঠানের?\s*নাম|পরীক্ষার\s*নাম\s*লিখুন|ঠিকানা\s*লিখুন|Class\s*Name|Exam\s*Name)$/i.test(txt.trim());
+            if (h.institute && !isPlaceholder(h.institute)) {
               xml += `
               <w:p>
                 <w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="40"/></w:pPr>
                 ${renderRuns(h.institute, true, false, '30')}
               </w:p>`;
             }
-            if (h.exam) {
+            if (h.exam && !isPlaceholder(h.exam)) {
               xml += `
               <w:p>
                 <w:pPr><w:jc w:val="center"/><w:spacing w:after="40"/></w:pPr>
@@ -879,13 +933,23 @@
             : '';
 
           if (isMcq) {
-            // MCQ Question: Simple space after serial number without tab jump to avoid wide gaps on 2-digit numbers (10+)
+            // MCQ Question: Native Hanging Indent (360 dxa)
+            // Serial number sits on left margin, question text wraps straight from 360 dxa.
+            // Nothing wraps under serial number!
             xml += `
             <w:p>
               <w:pPr>
-                <w:spacing w:before="40" w:after="20" w:line="240" w:lineRule="auto"/>
+                <w:ind w:left="360" w:hanging="360"/>
+                <w:tabs>
+                  <w:tab w:val="left" w:pos="360"/>
+                  <w:tab w:val="right" w:pos="${rightTabPos}"/>
+                </w:tabs>
+                <w:spacing w:before="35" w:after="15" w:line="240" w:lineRule="auto"/>
               </w:pPr>
-              ${renderRuns(numPrefix + ' ', true, false, '24')}${renderRuns(block.text, false, false, '24')}${formattedMarks ? `<w:r><w:tab/></w:r>${renderRuns(formattedMarks, true, false, '24')}` : ''}
+              ${renderRuns(numPrefix, true, false, bodySz)}
+              <w:r><w:tab/></w:r>
+              ${renderRuns(block.text, false, false, bodySz)}
+              ${formattedMarks ? `<w:r><w:tab/></w:r>${renderRuns(formattedMarks, true, false, bodySz)}` : ''}
             </w:p>`;
           } else {
             // CQ Question: Native hanging indent (432 dxa = 0.3 in)
@@ -1004,7 +1068,7 @@
               }
 
               // Render MCQ Options formatted in 4 equal columns (or 2 columns if long)
-              xml += DocxLayoutBuilder.formatMcqOptionsXml(mcqOptions, isBijoy, isPureEnglish);
+              xml += DocxLayoutBuilder.formatMcqOptionsXml(mcqOptions, isBijoy, isPureEnglish, bodySz);
             } else {
               // Standard Creative Sub-questions ((ক), (খ), (গ), (ঘ)) with marks
               for (const sub of block.subQuestions) {

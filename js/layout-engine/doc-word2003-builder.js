@@ -81,9 +81,17 @@
       opts.onProgress(60, 'প্রশ্নপত্র ও কলাম কাঠামো বিন্যাস হচ্ছে...');
 
       const archetypeId = (layout.profile && layout.profile.archetypeId) || '';
-      const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper';
-      const isCqPaper = archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq';
-      const isCombined = archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq'));
+      const totalQuestionBlocks = parsedAst.blocks.filter(b => b.type === 'question');
+      const mcqQuestionBlocks = totalQuestionBlocks.filter(q => {
+        if (!q.subQuestions || q.subQuestions.length === 0) return false;
+        const candidateSubs = q.subQuestions.filter(s => !s.isPromptText && !/^(?:[iIvVxX]+|\([iIvVxX]+\))[\.\)]/i.test((s.subId || '').trim()));
+        return candidateSubs.length >= 2 && candidateSubs.some(s => /^[ক-ঘa-d][\.\)]/i.test(s.subId || s.text || ''));
+      });
+      const isDominantMcq = (mcqQuestionBlocks.length >= 10) || (totalQuestionBlocks.length >= 3 && mcqQuestionBlocks.length >= totalQuestionBlocks.length * 0.7);
+
+      const isMcqPaper = archetypeId === 'bengali_mcq_paper' || layout.templateId === 'mcq-grid' || layout.templateId === 'bengali-mcq-paper' || layout.templateId === 'bengali_mcq_paper' || isDominantMcq;
+      const isCqPaper = !isDominantMcq && (archetypeId === 'bengali_cq_paper' || layout.orientation === 'landscape' || layout.templateId === 'bengali-cq-paper' || layout.templateId === 'bengali_cq_paper' || layout.templateId === 'creative-cq');
+      const isCombined = !isDominantMcq && (archetypeId === 'bengali_combined_exam_paper' || layout.templateId === 'bengali-combined-exam' || layout.templateId === 'bengali_combined_exam_paper' || (Array.isArray(parsedAst.blocks) && parsedAst.blocks.some(b => b && b.type === 'section_break' && b.target === 'mcq')));
       const isStandardQuestionPaper = archetypeId === 'bengali_standard_question_paper' || layout.templateId === 'question-2col' || layout.templateId === 'bengali_standard_question_paper' || layout.templateId === 'bengali-standard-question';
 
       let sections = [];

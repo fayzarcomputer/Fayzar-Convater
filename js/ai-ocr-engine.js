@@ -123,13 +123,18 @@
      * Creative Questions (CQ 70 marks, Class 6-12 with stimulus & ক,খ,গ,ঘ): doc_type: EXAM_CQ, columns: 2
      * Standard/Primary Exam (Class 1-5, short questions, fill-in-blanks, matching, grammar, general questions): doc_type: EXAM_GENERAL, columns: 2
        -> CRITICAL: NEVER classify general or primary exam papers as EXAM_CQ! If there is no stimulus or no 4-tier CQ sub-questions, it is EXAM_GENERAL.
-     * Pure Multiple Choice Questions (20-30 MCQs): doc_type: EXAM_MCQ, columns: 2
+     * Pure Multiple Choice Questions (20-30 MCQs, or source has only MCQs with at least 10-15 questions): doc_type: EXAM_MCQ, columns: 2
      * Combined Exam (both Creative Questions & 20-30 MCQs): doc_type: EXAM_COMBINED, columns: 2
      * Institutional Office Pad / Letterhead Memo: doc_type: OFFICE_PAD, columns: 1
      * Testimonial / Character Certificate (প্রত্যয়নপত্র ও প্রশংসাপত্র): doc_type: PROTTOYON_CERT, columns: 1
      * Government / Job Application (বরাবর, বিষয়, জনাব সংবলিত দরখাস্ত): doc_type: GOVT_APP, columns: 1
      * Official Government / Institutional Notice / Memo: doc_type: OFFICIAL_NOTICE, columns: 1
      * Legal Deed / 300 Tk Non-Judicial Stamp Contract: doc_type: LEGAL_DEED, columns: 1
+   - HEADER PLACEHOLDER MANDATE (FOR EXAM PAPERS):
+     * If the source exam paper has no school/institute name, write: institute: "আপনার প্রতিষ্ঠান এর নাম"
+     * If address is missing, write address in subtitle or next line: "ঠিকানা লিখুন"
+     * If exam name is missing, write: exam: "পরীক্ষার নাম লিখুন"
+     * Ensure grade (শ্রেণি), subject (বিষয়), time (সময়), fullMarks (পূর্ণমান) are included in frontmatter or top header.
    - SECTION BREAK MANDATE:
      * When transcribing a combined question paper (containing both Creative Questions and Multiple Choice Questions), when the Creative Question part ends and the Multiple Choice (MCQ) section begins (before its institutional header/title), YOU MUST INSERT THIS EXACT SEPARATOR ON ITS OWN LINE:
        ---SECTION_BREAK:MCQ---

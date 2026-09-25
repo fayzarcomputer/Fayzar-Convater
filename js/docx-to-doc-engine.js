@@ -377,13 +377,23 @@
 
     _parseDocumentBody(docXml, styleResolver, mediaMap, opts) {
       const body = docXml ? (docXml.querySelector("body") || docXml.documentElement) : null;
-      let htmlParts = [];
+      let sections = [];
+      let currentSectionHtml = [];
       let previewLines = [];
       let stats = { paragraphs: 0, tables: 0, runs: 0 };
 
-      // Page Setup & Margins from sectPr
-      const sectPr = body ? body.querySelector("sectPr") : null;
-      let pageSettings = this._parseSectionProperties(sectPr, opts);
+      // Find the final body sectPr (direct child or document end)
+      let bodyEndSectPr = null;
+      if (body) {
+        const bodyChildren = body.childNodes;
+        for (let i = bodyChildren.length - 1; i >= 0; i--) {
+          const c = bodyChildren[i];
+          if (c.nodeType === 1 && (c.localName === 'sectPr' || c.nodeName.split(':').pop() === 'sectPr')) {
+            bodyEndSectPr = c;
+            break;
+          }
+        }
+      }
 
       const children = body ? body.childNodes : [];
       for (let i = 0; i < children.length; i++) {
@@ -394,24 +404,51 @@
 
         if (nodeName === 'p') {
           const pData = this._parseParagraph(node, styleResolver, mediaMap, opts);
-          htmlParts.push(pData.html);
+          currentSectionHtml.push(pData.html);
           stats.paragraphs++;
           stats.runs += pData.runCount;
           if (pData.text && previewLines.length < 20) {
             previewLines.push(pData.text);
           }
+
+          // Check if paragraph ends with a section break (<w:pPr><w:sectPr>)
+          let pSectPr = null;
+          const pPr = node.querySelector("pPr") || Array.from(node.childNodes).find(c => c.nodeType === 1 && (c.localName === 'pPr' || c.nodeName.split(':').pop() === 'pPr'));
+          if (pPr) {
+            pSectPr = pPr.querySelector("sectPr") || Array.from(pPr.childNodes).find(c => c.nodeType === 1 && (c.localName === 'sectPr' || c.nodeName.split(':').pop() === 'sectPr'));
+          }
+
+          if (pSectPr) {
+            const secSettings = this._parseSectionProperties(pSectPr, opts);
+            sections.push({
+              html: currentSectionHtml.join('\n'),
+              pageSettings: secSettings
+            });
+            currentSectionHtml = [];
+          }
         } else if (nodeName === 'tbl') {
           const tblData = this._parseTable(node, styleResolver, mediaMap, opts);
-          htmlParts.push(tblData.html);
+          currentSectionHtml.push(tblData.html);
           stats.tables++;
           stats.paragraphs += tblData.stats.paragraphs;
           stats.runs += tblData.stats.runs;
         }
       }
 
+      // Add the final section (or default single section)
+      const finalSecSettings = this._parseSectionProperties(bodyEndSectPr, opts);
+      sections.push({
+        html: currentSectionHtml.join('\n'),
+        pageSettings: finalSecSettings
+      });
+
+      // Backward compatibility: default pageSettings pointing to last/main section
+      const mainPageSettings = sections[sections.length - 1].pageSettings;
+
       return {
-        bodyHtml: htmlParts.join('\n'),
-        pageSettings: pageSettings,
+        bodyHtml: sections.map(s => s.html).join('\n'),
+        sections: sections,
+        pageSettings: mainPageSettings,
         preview: previewLines,
         stats: stats
       };
@@ -458,19 +495,23 @@
           if (hTwips) height = (hTwips / 1440).toFixed(2) + "in";
         }
 
-        if (!selectedMargin) {
-          const pgMar = sectPr.querySelector("pgMar");
-          if (pgMar) {
-            const topTwips = parseInt(pgMar.getAttribute("w:top") || pgMar.getAttribute("top"), 10);
-            const bottomTwips = parseInt(pgMar.getAttribute("w:bottom") || pgMar.getAttribute("bottom"), 10);
-            const leftTwips = parseInt(pgMar.getAttribute("w:left") || pgMar.getAttribute("left"), 10);
-            const rightTwips = parseInt(pgMar.getAttribute("w:right") || pgMar.getAttribute("right"), 10);
+        // Section Margins from master docx
+        const pgMar = sectPr.querySelector("pgMar");
+        if (pgMar) {
+          const topTwips = parseInt(pgMar.getAttribute("w:top") || pgMar.getAttribute("top"), 10);
+          const bottomTwips = parseInt(pgMar.getAttribute("w:bottom") || pgMar.getAttribute("bottom"), 10);
+          const leftTwips = parseInt(pgMar.getAttribute("w:left") || pgMar.getAttribute("left"), 10);
+          const rightTwips = parseInt(pgMar.getAttribute("w:right") || pgMar.getAttribute("right"), 10);
 
-            if (topTwips) marginTop = (topTwips / 1440).toFixed(2) + "in";
-            if (bottomTwips) marginBottom = (bottomTwips / 1440).toFixed(2) + "in";
-            if (leftTwips) marginLeft = (leftTwips / 1440).toFixed(2) + "in";
-            if (rightTwips) marginRight = (rightTwips / 1440).toFixed(2) + "in";
-          }
+          if (topTwips) marginTop = (topTwips / 1440).toFixed(2) + "in";
+          if (bottomTwips) marginBottom = (bottomTwips / 1440).toFixed(2) + "in";
+          if (leftTwips) marginLeft = (leftTwips / 1440).toFixed(2) + "in";
+          if (rightTwips) marginRight = (rightTwips / 1440).toFixed(2) + "in";
+        } else if (selectedMargin && MARGIN_MAP[selectedMargin]) {
+          marginTop = MARGIN_MAP[selectedMargin].top;
+          marginRight = MARGIN_MAP[selectedMargin].right;
+          marginBottom = MARGIN_MAP[selectedMargin].bottom;
+          marginLeft = MARGIN_MAP[selectedMargin].left;
         }
 
         const colsEl = sectPr.querySelector("cols");
@@ -536,10 +577,34 @@
           const left = ind.getAttribute("w:left") || ind.getAttribute("left");
           const right = ind.getAttribute("w:right") || ind.getAttribute("right");
           const firstLine = ind.getAttribute("w:firstLine") || ind.getAttribute("firstLine");
+          const hanging = ind.getAttribute("w:hanging") || ind.getAttribute("hanging");
 
           if (left) pStyles.push(`margin-left:${(parseInt(left, 10)/20).toFixed(1)}pt`);
           if (right) pStyles.push(`margin-right:${(parseInt(right, 10)/20).toFixed(1)}pt`);
-          if (firstLine) pStyles.push(`text-indent:${(parseInt(firstLine, 10)/20).toFixed(1)}pt`);
+          if (firstLine) {
+            pStyles.push(`text-indent:${(parseInt(firstLine, 10)/20).toFixed(1)}pt`);
+          } else if (hanging) {
+            // Negative indent for Word hanging indents (e.g. question numbers)
+            pStyles.push(`text-indent:-${(parseInt(hanging, 10)/20).toFixed(1)}pt`);
+          }
+        }
+
+        // Parse tab stops (w:tabs > w:tab)
+        const tabsEl = pPr.querySelector("tabs") || pPr.querySelector("*|tabs");
+        if (tabsEl) {
+          const tabNodes = tabsEl.querySelectorAll("tab, *|tab");
+          const tabStops = [];
+          for (let tn of tabNodes) {
+            const pos = tn.getAttribute("w:pos") || tn.getAttribute("pos");
+            const val = tn.getAttribute("w:val") || tn.getAttribute("val") || "left";
+            if (pos) {
+              const ptVal = (parseInt(pos, 10)/20).toFixed(1) + "pt";
+              tabStops.push(`${val} ${ptVal}`);
+            }
+          }
+          if (tabStops.length > 0) {
+            pStyles.push(`mso-tab-stops:${tabStops.join(' ')}`);
+          }
         }
       }
 
@@ -557,6 +622,13 @@
         if (child.nodeType !== 1) continue;
 
         const childName = child.localName || child.nodeName.split(':').pop();
+
+        if (childName === 'tab') {
+          runsHtml.push('<span style="mso-tab-count:1">\t</span>');
+          textContent += "\t";
+          runCount++;
+          continue;
+        }
 
         if (childName === 'r') {
           const fldCharNode = child.querySelector("fldChar");
@@ -824,7 +896,7 @@
           htmlContent += this._renderMsoSpaces(escT);
         } else if (tName === 'tab') {
           textContent += "\t";
-          htmlContent += '<span style="mso-tab-count:1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>';
+          htmlContent += '___MSO_TAB_SEP___';
         } else if (tName === 'br') {
           textContent += "\n";
           htmlContent += '<br/>\n';
@@ -847,15 +919,15 @@
       // Check for Drawings / Images inside Run (both DrawingML and VML)
       const imagesHtml = this._extractImagesFromNode(rNode, mediaMap);
 
-      // Check if SutonnyMJ run contains hyphens/dashes - if so, isolate them to Times New Roman
-      if (isSutonnyRun && /[-–—−‒―]/.test(textContent)) {
-        const dParts = textContent.split(/([-–—−‒―]+)/);
+      // Check if SutonnyMJ run contains hyphens/dashes or % - if so, isolate them to Times New Roman
+      if (isSutonnyRun && /[-–—−‒―%]/.test(textContent) && !/\t/.test(textContent)) {
+        const dParts = textContent.split(/([-–—−‒―%]+)/);
         let splitHtml = imagesHtml;
         for (let dp of dParts) {
           if (!dp) continue;
-          const isDash = /[-–—−‒―]/.test(dp);
-          const fAscii = isDash ? 'Times New Roman' : 'SutonnyMJ';
-          const fBidi = isDash ? 'Times New Roman' : 'SutonnyMJ';
+          const isSymbol = /[-–—−‒―%]/.test(dp);
+          const fAscii = isSymbol ? 'Times New Roman' : 'SutonnyMJ';
+          const fBidi = isSymbol ? 'Times New Roman' : 'SutonnyMJ';
           const partStyles = [
             `font-family:'${fAscii}',Arial,sans-serif`,
             `mso-ascii-font-family:'${fAscii}'`,
@@ -867,7 +939,7 @@
           if (isUnderline) partStyles.push(`text-decoration:underline`);
           const escDp = this._escapeHtml(dp);
           const fmtDp = this._renderMsoSpaces(escDp);
-          if (isDash) {
+          if (isSymbol) {
             splitHtml += `<span lang="EN-US" style="${partStyles.join(';')}">${fmtDp}</span>`;
           } else {
             splitHtml += `<span style="${partStyles.join(';')}">${fmtDp}</span>`;
@@ -889,10 +961,22 @@
       if (isItalic) rStyles.push(`font-style:italic;mso-bidi-font-style:italic`);
       if (isUnderline) rStyles.push(`text-decoration:underline`);
 
-      let escapedText = htmlContent;
-
       const styleAttr = rStyles.length > 0 ? ` style="${rStyles.join(';')}"` : '';
-      const html = `${imagesHtml}<span${styleAttr}>${escapedText}</span>`;
+      let html = imagesHtml;
+
+      if (htmlContent.includes('___MSO_TAB_SEP___')) {
+        const parts = htmlContent.split('___MSO_TAB_SEP___');
+        for (let pi = 0; pi < parts.length; pi++) {
+          if (pi > 0) {
+            html += '<span style="mso-tab-count:1">\t</span>';
+          }
+          if (parts[pi]) {
+            html += `<span${styleAttr}>${parts[pi]}</span>`;
+          }
+        }
+      } else {
+        html += `<span${styleAttr}>${htmlContent}</span>`;
+      }
 
       return {
         html: html,
@@ -1024,7 +1108,36 @@
     }
 
     _buildWord2003Document(parsedBody, opts) {
-      const page = parsedBody.pageSettings;
+      const sections = (parsedBody.sections && parsedBody.sections.length > 0)
+        ? parsedBody.sections
+        : [{ html: parsedBody.bodyHtml, pageSettings: parsedBody.pageSettings }];
+
+      // Generate CSS @page Section1, Section2 ... and div.Section1, div.Section2 ...
+      let pageStylesCss = '';
+      let bodyDivsHtml = '';
+
+      sections.forEach((sec, idx) => {
+        const secIndex = idx + 1;
+        const page = sec.pageSettings;
+        const colsCss = page.cols >= 2
+          ? `\tmso-columns:${page.cols} even 0.2in;\n\tmso-column-separator:solid;\n`
+          : '';
+
+        pageStylesCss += ` @page Section${secIndex}
+\t{size:${page.width} ${page.height};
+\tmargin:${page.marginTop} ${page.marginRight} ${page.marginBottom} ${page.marginLeft};
+\tmso-header-margin:.5in;
+\tmso-footer-margin:.5in;
+${colsCss}\tmso-paper-source:0;}
+ div.Section${secIndex}
+\t{page:Section${secIndex};}\n`;
+
+        const sectionBreak = (idx === 0)
+          ? ''
+          : `<br clear=all style='page-break-before:auto;mso-break-type:section-break'>\n`;
+
+        bodyDivsHtml += `${sectionBreak}<div class="Section${secIndex}">\n${sec.html}\n</div>\n`;
+      });
 
       return `<!DOCTYPE html>
 <html xmlns:v="urn:schemas-microsoft-com:vml"
@@ -1079,80 +1192,69 @@
 <!--
  /* Font Definitions */
  @font-face
-	{font-family:SutonnyMJ;
-	panose-1:2 11 6 4 2 2 2 2 2 4;
-	mso-font-alt:"SutonnyMJ";
-	mso-font-charset:0;
-	mso-generic-font-family:auto;
-	mso-font-pitch:variable;
-	mso-font-signature:3 0 0 0 1 0;}
+\t{font-family:SutonnyMJ;
+\tpanose-1:2 11 6 4 2 2 2 2 2 4;
+\tmso-font-alt:"SutonnyMJ";
+\tmso-font-charset:0;
+\tmso-generic-font-family:auto;
+\tmso-font-pitch:variable;
+\tmso-font-signature:3 0 0 0 1 0;}
  @font-face
-	{font-family:SutonnyOMJ;
-	panose-1:2 11 6 4 2 2 2 2 2 4;
-	mso-font-alt:"SutonnyOMJ";
-	mso-font-charset:0;
-	mso-generic-font-family:auto;
-	mso-font-pitch:variable;
-	mso-font-signature:3 0 0 0 1 0;}
+\t{font-family:SutonnyOMJ;
+\tpanose-1:2 11 6 4 2 2 2 2 2 4;
+\tmso-font-alt:"SutonnyOMJ";
+\tmso-font-charset:0;
+\tmso-generic-font-family:auto;
+\tmso-font-pitch:variable;
+\tmso-font-signature:3 0 0 0 1 0;}
  @font-face
-	{font-family:Kalpurush;
-	panose-1:2 11 6 4 2 2 2 2 2 4;
-	mso-font-alt:"Kalpurush";
-	mso-font-charset:0;
-	mso-generic-font-family:auto;
-	mso-font-pitch:variable;
-	mso-font-signature:3 0 0 0 1 0;}
+\t{font-family:Kalpurush;
+\tpanose-1:2 11 6 4 2 2 2 2 2 4;
+\tmso-font-alt:"Kalpurush";
+\tmso-font-charset:0;
+\tmso-generic-font-family:auto;
+\tmso-font-pitch:variable;
+\tmso-font-signature:3 0 0 0 1 0;}
  @font-face
-	{font-family:"Times New Roman";
-	panose-1:2 2 6 3 5 4 5 2 3 4;
-	mso-font-charset:0;
-	mso-generic-font-family:roman;
-	mso-font-pitch:variable;
-	mso-font-signature:-536870145 1107305727 0 0 415 0;}
+\t{font-family:"Times New Roman";
+\tpanose-1:2 2 6 3 5 4 5 2 3 4;
+\tmso-font-charset:0;
+\tmso-generic-font-family:roman;
+\tmso-font-pitch:variable;
+\tmso-font-signature:-536870145 1107305727 0 0 415 0;}
 
  /* Style Definitions */
  p.MsoNormal, li.MsoNormal, div.MsoNormal
-	{mso-style-parent:"";
-	margin:0in;
-	margin-bottom:.0001pt;
-	mso-pagination:widow-orphan;
-	font-size:12.0pt;
-	font-family:"SutonnyMJ",Arial,sans-serif;
-	mso-ascii-font-family:"Times New Roman";
-	mso-hansi-font-family:"Times New Roman";
-	mso-fareast-font-family:"Times New Roman";
-	mso-bidi-font-family:"SutonnyMJ";}
+\t{mso-style-parent:"";
+\tmargin:0in;
+\tmargin-bottom:.0001pt;
+\tmso-pagination:widow-orphan;
+\tfont-size:12.0pt;
+\tfont-family:"SutonnyMJ",Arial,sans-serif;
+\tmso-ascii-font-family:"Times New Roman";
+\tmso-hansi-font-family:"Times New Roman";
+\tmso-fareast-font-family:"Times New Roman";
+\tmso-bidi-font-family:"SutonnyMJ";}
  table.MsoNormalTable
-	{mso-style-name:"Table Normal";
-	mso-tstyle-rowband-size:0;
-	mso-tstyle-colband-size:0;
-	mso-style-noshow:yes;
-	mso-style-parent:"";
-	mso-padding-alt:0in 5.4pt 0in 5.4pt;
-	mso-para-margin:0in;
-	mso-para-margin-bottom:.0001pt;
-	mso-pagination:widow-orphan;
-	font-size:10.0pt;
-	font-family:"Times New Roman";
-	mso-ansi-language:#0400;
-	mso-fareast-language:#0400;
-	mso-bidi-language:#0400;}
- @page Section1
-	{size:${page.width} ${page.height};
-	margin:${page.marginTop} ${page.marginRight} ${page.marginBottom} ${page.marginLeft};
-	mso-header-margin:.5in;
-	mso-footer-margin:.5in;
-${page.cols >= 2 ? `\tmso-columns:${page.cols} even 0.2in;\n\tmso-column-separator:solid;\n` : ''}	mso-paper-source:0;}
- div.Section1
-	{page:Section1;}
--->
+\t{mso-style-name:"Table Normal";
+\tmso-tstyle-rowband-size:0;
+\tmso-tstyle-colband-size:0;
+\tmso-style-noshow:yes;
+\tmso-style-parent:"";
+\tmso-padding-alt:0in 5.4pt 0in 5.4pt;
+\tmso-para-margin:0in;
+\tmso-para-margin-bottom:.0001pt;
+\tmso-pagination:widow-orphan;
+\tfont-size:10.0pt;
+\tfont-family:"Times New Roman";
+\tmso-ansi-language:#0400;
+\tmso-fareast-language:#0400;
+\tmso-bidi-language:#0400;}
+${pageStylesCss}-->
 </style>
 </head>
 <body lang="EN-US" style="tab-interval:.5in">
-<div class="Section1">
-${parsedBody.bodyHtml}
-</div>
-</body>
+${bodyDivsHtml}</body>
 </html>`;
     }
 

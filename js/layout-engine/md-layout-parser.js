@@ -135,17 +135,34 @@
         };
       }
       if (docType === 'EXAM_COMBINED' || docType === 'COMBINED_EXAM') {
+        const hasCqMarkers = /(?:ক-বিভাগ|খ-বিভাগ|গ-বিভাগ|ঘ-বিভাগ|গদ্য|কবিতা|সৃজনশীল|উদ্দীপক|দৃশ্যকল্প|---SECTION_BREAK)/i.test(text);
+        if (hasCqMarkers) {
+          return {
+            archetypeId: 'bengali_combined_exam_paper',
+            name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
+            reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_COMBINED',
+            isPureEnglish: isPureEnglish,
+            fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
+            numberingDelimiter: '।',
+            hangingIndentDxa: 432,
+            subIndentDxa: 864,
+            columns: 1,
+            hasCombinedSections: true,
+            tableStyle: 'plain_compact',
+            stripAuditNotes: true
+          };
+        }
+        // If frontmatter declared COMBINED but document contains only MCQs and no CQ markers, route to bengali_mcq_paper
         return {
-          archetypeId: 'bengali_combined_exam_paper',
-          name: 'সম্মিলিত সৃজনশীল ও বহুনির্বাচনী প্রশ্নপত্র',
-          reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_COMBINED',
+          archetypeId: 'bengali_mcq_paper',
+          name: 'বহুনির্বাচনী প্রশ্নপত্র (MCQ)',
+          reason: 'ফ্রন্টম্যাটার Sector ID: EXAM_COMBINED কিন্তু সৃজনশীল অংশ অনুপস্থিত থাকায় বহুনির্বাচনী প্রোফাইল কার্যকর',
           isPureEnglish: isPureEnglish,
           fontFamily: isPureEnglish ? 'Times New Roman' : 'SutonnyMJ',
           numberingDelimiter: '।',
-          hangingIndentDxa: 432,
-          subIndentDxa: 864,
-          columns: 1,
-          hasCombinedSections: true,
+          hangingIndentDxa: 360,
+          subIndentDxa: 0,
+          columns: 2,
           tableStyle: 'plain_compact',
           stripAuditNotes: true
         };
@@ -251,7 +268,7 @@
       // Strict MCQ Gate: A document is ONLY an MCQ paper if:
       // 1. It has 18 to 30 MCQs (e.g. standard 20-30 MCQ exam), OR
       // 2. 100% of all questions are MCQs (all questions have options).
-      const isStrictMcqPaper = (mcqQuestions >= 18) || (totalQuestions >= 3 && mcqQuestions === totalQuestions) || (totalQuestions > 10 && mcqQuestions >= totalQuestions * 0.85);
+      const isStrictMcqPaper = (mcqQuestions >= 10) || (totalQuestions >= 3 && mcqQuestions === totalQuestions) || (totalQuestions >= 10 && mcqQuestions >= totalQuestions * 0.7);
 
       // 0. EXPLICIT VISION AI LAYOUT TAGS (Highest Priority - Direct Vision AI Classification)
       const layoutTagMatch = text.match(/\[LAYOUT:\s*([A-Za-z0-9_\-]+)\]/i);
@@ -1051,8 +1068,9 @@
               subText = subText.replace(/\[\s*(?:(?:ঢাকা|কুমিল্লা|চট্টগ্রাম|রাজশাহী|যশোর|বরিশাল|সিলেট|দিনাজপুর|ময়মনসিংহ|বাংলাদেশ|কারিগরি|মাদরাসা)\s*বোর্ড|বোর্ড|ক্যাডেট\s*কলেজ|অধ্যায়|সহপাঠ|পৃষ্ঠা)[^\]]*\]/gi, '').trim();
               subText = subText.replace(/\((?:(?:ঢাকা|কুমিল্লা|চট্টগ্রাম|রাজশাহী|যশোর|বরিশাল|সিলেট|দিনাজপুর|ময়মনসিংহ|বাংলাদেশ|কারিগরি|মাদরাসা)\s*বোর্ড|বোর্ড|ক্যাডেট\s*কলেজ)[^\)]*\)/gi, '').trim();
 
+              // Only match trailing marks if not ending in % or part of MCQ option/math values
               const subMarksMatch = subText.match(/\s*\[\s*([০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+?)\s*\]\s*$/)
-                || subText.match(/(?:(?:\?|।|:)\s*|\t|\s{2,})([০-৯0-9]{1,2})\s*$/);
+                || (!subText.includes('%') && subText.match(/(?:(?:\?|।|:)\s*|\t|\s{2,})([০-৯0-9]{1,2})\s*$/));
               if (subMarksMatch) {
                 subMarks = subMarksMatch[1].trim();
                 subText = subText.replace(/\s*\[\s*[০-৯0-9a-zA-Z\s\*\+\-\=\/×÷\.\,\:\;]+\s*\]\s*$/, '')
