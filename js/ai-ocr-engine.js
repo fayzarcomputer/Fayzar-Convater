@@ -3189,7 +3189,7 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
       return;
     }
     isDownloadingDocument = true;
-    setTimeout(() => { isDownloadingDocument = false; }, 1500);
+    setTimeout(() => { isDownloadingDocument = false; }, 30000);
 
     const text = (elements.outputUnicodeArea && elements.outputUnicodeArea.value) || state.unicodeText;
     if (!text || !text.trim()) {
@@ -3301,7 +3301,7 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
       } catch (err) {
         console.error('Doc conversion error', err);
         showToast(`ওয়ার্ড ২০০৩ ফাইল তৈরিতে সমস্যা: ${err.message}`, 'error');
-        throw err;
+        isDownloadingDocument = false;
       }
       return;
     }
@@ -3322,7 +3322,8 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
     } catch (err) {
       console.error('Master docx generation error:', err);
       showToast(`মাস্টার ওয়ার্ড ফাইল তৈরিতে সমস্যা: ${err.message}`, 'error');
-      throw err;
+      isDownloadingDocument = false;
+      return;
     }
 
     if (!masterDocxBlob) {
@@ -3337,7 +3338,7 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
         showToast(`ইউনিকোড মাস্টার .DOCX ডাউনলোড সম্পন্ন!`, 'success');
       } catch (err) {
         showToast(`ইউনিকোড DOCX ডাউনলোডে সমস্যা: ${err.message}`, 'error');
-        throw err;
+        isDownloadingDocument = false;
       }
       return;
     }
@@ -3365,7 +3366,8 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
       } catch (err) {
         console.error('Bijoy DOCX conversion error:', err);
         showToast(`বিজয় DOCX তৈরিতে সমস্যা: ${err.message}`, 'error');
-        throw err;
+      } finally {
+        isDownloadingDocument = false;
       }
       return;
     }
