@@ -2882,6 +2882,12 @@ function initUnifiedConverterEngine() {
 
       if (wizardPreviewContent) {
         wizardPreviewContent.value = (res && res.unicode) || (window.FayzarAiOcrEngine && window.FayzarAiOcrEngine.state && window.FayzarAiOcrEngine.state.unicodeText) || wizardPreviewContent.value || '';
+        if (window.FayzarAiOcrEngine && window.FayzarAiOcrEngine.state) {
+          window.FayzarAiOcrEngine.state.unicodeText = wizardPreviewContent.value;
+          if (currentScanResult && currentScanResult.file) {
+            window.FayzarAiOcrEngine.state.selectedFile = currentScanResult.file;
+          }
+        }
       }
 
       wizardProgressCard?.classList.add('hidden');
@@ -2894,16 +2900,26 @@ function initUnifiedConverterEngine() {
 
       if (wizardDlDocBtn) {
         wizardDlDocBtn.classList.remove('hidden');
-        wizardDlDocBtn.onclick = () => window.FayzarAiOcrEngine.downloadWordDocument('doc');
+        wizardDlDocBtn.onclick = () => {
+          if (typeof window.showToastNotification === 'function') window.showToastNotification('ওয়ার্ড ২০০৩ (.DOC) ডাউনলোড রিকুয়েস্ট করা হয়েছে...', 'info');
+          window.FayzarAiOcrEngine.downloadWordDocument('doc');
+        };
       }
       if (wizardDlDocxBtn) {
         wizardDlDocxBtn.classList.remove('hidden');
-        wizardDlDocxBtn.onclick = () => window.FayzarAiOcrEngine.downloadWordDocument('bijoy_docx');
+        wizardDlDocxBtn.onclick = () => {
+          if (typeof window.showToastNotification === 'function') window.showToastNotification('আধুনিক বিজয় (.DOCX) ডাউনলোড রিকুয়েস্ট করা হয়েছে...', 'info');
+          window.FayzarAiOcrEngine.downloadWordDocument('bijoy_docx');
+        };
       }
       if (wizardDlUnicodeDocxBtn) {
         wizardDlUnicodeDocxBtn.classList.remove('hidden');
-        wizardDlUnicodeDocxBtn.onclick = () => window.FayzarAiOcrEngine.downloadWordDocument('unicode_docx');
+        wizardDlUnicodeDocxBtn.onclick = () => {
+          if (typeof window.showToastNotification === 'function') window.showToastNotification('ইউনিকোড (.DOCX) ডাউনলোড রিকুয়েস্ট করা হয়েছে...', 'info');
+          window.FayzarAiOcrEngine.downloadWordDocument('unicode_docx');
+        };
       }
+
       if (wizardStudioPreviewBtn) {
         wizardStudioPreviewBtn.classList.remove('hidden');
         wizardStudioPreviewBtn.onclick = () => {
@@ -3051,6 +3067,8 @@ function initUnifiedConverterEngine() {
     const options = {
       direction,
       targetFont,
+      font: targetFont === 'SutonnyMJ' ? 'bijoy' : 'unicode',
+      docType: 'EXAM_CQ',
       convertNumbers: false,
       numberFormat: 'keep',
       convertHeaders: true,

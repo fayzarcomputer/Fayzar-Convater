@@ -151,12 +151,14 @@
    - Convert all tabular grids to standard Markdown tables |---|---| with proper column dividers.
 
 3. EQUATIONS & CHEMICAL FORMULAS:
-   - Wrap all chemical formulas, variables, and equations strictly in LaTeX using $ for inline and $$ for block math.
+   - Wrap ALL variables, equations, fractions, and vectors (e.g., \\vec{AD}) strictly in LaTeX using $ for inline and $$ for block math (e.g., $\\vec{AD}$). NEVER output raw LaTeX without the $ signs!
    - CRITICAL: Wrap ALL LaTeX blocks inside inline code backticks (e.g., \`$CaCO_3$\`, \`$\\frac{a}{b}$\`) to prevent UI/API rendering issues.
+   - ZERO "ERROR!" POLICY: If you cannot read an equation or it is blurry, do your best-effort LaTeX transcription. NEVER EVER output the word "Error!" in the text.
 
 4. MCQ FORMATTING:
    - Use independent serials starting from 1 (১।, ২।, ৩। ... ৩০।).
    - Use tabs for options: [Tab]ক. [Tab]খ. [Tab]গ. [Tab]ঘ. to help the downstream layout engine.
+   - MULTINOMIAL MCQ (বহুপদী): If the question has roman numeral statements (i., ii., iii. or i, ii, iii), you MUST preserve them exactly at the beginning of the lines (e.g., \`i. statement\`, \`ii. statement\`, \`iii. statement\`). DO NOT remove or convert them to standard markdown lists!
 
 5. NO EXTRA ENTERS:
    - Do not add double blank lines between questions, sub-questions, or options.
@@ -310,9 +312,10 @@ SPECIFIC DEFECTS YOU MUST AUDIT AND FIX:
    - In MCQs, verify all options ((ক), (খ), (গ), (ঘ)) and roman numerals (i, ii, iii) are present.
    - Verify that all equations, tables, and lines from all pages are included.
 
-3. বানান ও সমীকরণ সংশোধন (Spelling & Typo Correction):
+3. বানান ও সমীকরণ সংশোধন (Spelling, Equations & Math Correction):
    - Fix any OCR spelling errors, broken yuktakhor (যুক্তবর্ণ), blurred characters, or punctuation mistakes.
-   - Ensure math equations are clean LaTeX without illegal formatting.
+   - CRITICAL MATH AUDIT: Ensure all equations, variables, vectors, and fractions (e.g., \\vec{AD}) are strictly wrapped in LaTeX $ signs (e.g., $\\vec{AD}$) AND wrapped in backticks (e.g., \`$\\vec{AD}$\`). NEVER leave raw LaTeX strings unprotected!
+   - ZERO "ERROR!" POLICY: If the previous draft says "Error!", it means the earlier model failed to read the equation. You MUST read the equation from the image and replace "Error!" with the correct LaTeX math. NEVER output "Error!".
 
 4. ক্রমিক নম্বর ও ফরম্যাটিং নিয়ম বজায় রাখা:
    - Separate sequential numbering starting from ১ for each question category:
@@ -1884,6 +1887,9 @@ Output the COMPLETE, FULL document text from start to finish, ending with the ma
       if (apiKey && isValidKeyFn(apiKey) && !keyPool.includes(apiKey.trim())) {
         keyPool.unshift(apiKey.trim());
       }
+      if (keyPool.length === 0) {
+        keyPool.push('BACKEND_PROXY');
+      }
 
       for (let k = 0; k < keyPool.length; k++) {
         const currentKey = keyPool[k];
@@ -1898,9 +1904,20 @@ Output the COMPLETE, FULL document text from start to finish, ending with the ma
         }
 
         const epVersion = 'v1beta';
-        const streamEndpoint = `https://generativelanguage.googleapis.com/${epVersion}/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(currentKey)}`;
+        const streamEndpoint = currentKey === 'BACKEND_PROXY'
+          ? '/api/gemini'
+          : `https://generativelanguage.googleapis.com/${epVersion}/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(currentKey)}`;
 
         let currentPayload = buildModelPayload(model, false);
+        
+        let fetchPayload = currentPayload;
+        if (currentKey === 'BACKEND_PROXY') {
+          fetchPayload = {
+            model: model,
+            endpoint: `${epVersion}/models/${model}:streamGenerateContent`,
+            data: currentPayload
+          };
+        }
 
         // 60s realistic connect timeout: gives full time for multi-MB image upload and thinking models without premature abort
         const CONNECT_TIMEOUT_MS = 60000;
@@ -1912,7 +1929,7 @@ Output the COMPLETE, FULL document text from start to finish, ending with the ma
           let res = await fetchWithTimeout(streamEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentPayload)
+            body: JSON.stringify(fetchPayload)
           }, CONNECT_TIMEOUT_MS);
 
           if (res.status === 404) {
@@ -3189,74 +3206,19 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
     const rawName = state.selectedFile?.name || state.filesQueue?.[0]?.name || 'Document';
     const baseName = rawName.replace(/\.[^/.]+$/, '');
 
+    let masterDocxBlob = null;
+    let parsedDocType = 'EXAM_CQ';
+    const fmMatch = text.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (fmMatch) {
+      const typeMatch = fmMatch[1].match(/doc_type:\s*(\w+)/);
+      if (typeMatch) parsedDocType = typeMatch[1];
+    }
+
     // FORMAT 0: Raw Markdown .MD (Direct pure text with full LaTeX equations intact)
     if (format === 'md' || format === 'markdown') {
       const mdBlob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
       triggerDownload(mdBlob, `${baseName}_Equations.md`);
       showToast(`মার্কডাউন (.md) ফাইল সফলভাবে ডাউনলোড হয়েছে!`, 'success');
-      return;
-    }
-
-    // =========================================================================
-    // পর্যায় ১: লেআউট ডিজাইন ও মাস্টার ওয়ার্ড ফাইল (.docx) জেনারেশন
-    // (১০০% খাঁটি ইউনিকোড — কোনো প্রকার বিজয় কনভার্সন হবে না)
-    // =========================================================================
-    showToast(`মাস্টার ওয়ার্ড (.docx) ফাইল প্রস্তুত হচ্ছে...`, 'info');
-    let masterDocxBlob = null;
-    try {
-      masterDocxBlob = await generateMasterDocx(text, {
-        pageSize: pageSizeVal,
-        margin: marginVal,
-        fontSize: fontSizeVal
-      });
-    } catch (err) {
-      console.error('Master docx generation error:', err);
-      showToast(`মাস্টার ওয়ার্ড ফাইল তৈরিতে সমস্যা: ${err.message}`, 'error');
-      throw err;
-    }
-
-    if (!masterDocxBlob) {
-      showToast('মাস্টার ওয়ার্ড ফাইল তৈরি করা যায়নি', 'error');
-      return;
-    }
-
-    // FORMAT 1: Modern Word .DOCX (Pure Unicode Master)
-    if (format === 'unicode_docx') {
-      try {
-        triggerDownload(masterDocxBlob, `${baseName}_Master_Unicode.docx`);
-        showToast(`ইউনিকোড মাস্টার .DOCX ডাউনলোড সম্পন্ন!`, 'success');
-      } catch (err) {
-        showToast(`ইউনিকোড DOCX ডাউনলোডে সমস্যা: ${err.message}`, 'error');
-        throw err;
-      }
-      return;
-    }
-
-    // =========================================================================
-    // পর্যায় ২: পরীক্ষিত কনভার্সন পাইপলাইন (মাস্টার .docx থেকে নির্দিষ্ট ফরম্যাটে রূপান্তর)
-    // =========================================================================
-
-    // FORMAT 2: Modern Word .DOCX (Bijoy SutonnyMJ via DocxHandler)
-    if (format === 'bijoy_docx') {
-      showToast(`বিজয় .DOCX তৈরি হচ্ছে...`, 'info');
-      try {
-        let bijoyBlob = null;
-        if (typeof DocxHandler !== 'undefined' && typeof DocxHandler.convertDocx === 'function') {
-          const res = await DocxHandler.convertDocx(masterDocxBlob, {
-            direction: 'u2b',
-            targetFont: 'SutonnyMJ'
-          });
-          bijoyBlob = res.convertedBlob || res.blob;
-        } else {
-          bijoyBlob = await createDocxBlob(text, true, { pageSize: pageSizeVal, margin: marginVal, fontSize: fontSizeVal });
-        }
-        triggerDownload(bijoyBlob, `${baseName}_Bijoy.docx`);
-        showToast(`বিজয় .DOCX ডাউনলোড সম্পন্ন!`, 'success');
-      } catch (err) {
-        console.error('Bijoy DOCX conversion error:', err);
-        showToast(`বিজয় DOCX তৈরিতে সমস্যা: ${err.message}`, 'error');
-        throw err;
-      }
       return;
     }
 
@@ -3266,9 +3228,25 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
       try {
         let docBlob = null;
 
-        // মূল পরীক্ষিত পাইপলাইন (১ম অগ্রাধিকার):
+        if (typeof FayzarPipeline !== 'undefined' && typeof FayzarPipeline.exportDoc === 'function') {
+          try {
+            const res = await FayzarPipeline.exportDoc(text, {
+              font: 'bijoy',
+              docType: parsedDocType,
+              pageSize: pageSizeVal,
+              margin: marginVal
+            });
+            if (res && res.content) {
+              docBlob = res.content;
+            }
+          } catch (e) {
+            console.warn('FayzarPipeline exportDoc fallback:', e);
+          }
+        }
+
+        // মূল পরীক্ষিত পাইপলাইন:
         // মাস্টার ইউনিকোড DOCX -> DocxHandler (ইউনিকোড টু বিজয়) -> DocxToDocConverter (.doc)
-        if (masterDocxBlob && typeof DocxHandler !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
+        if (!docBlob && masterDocxBlob && typeof DocxHandler !== 'undefined' && typeof DocxToDocConverter !== 'undefined') {
           // ধাপ ১: মাস্টার ইউনিকোড docx কে DocxHandler ও BanglaConverterEngine দিয়ে সুতন্নিএমজে docx এ কনভার্ট
           const bijoyDocxRes = await DocxHandler.convertDocx(masterDocxBlob, {
             direction: 'u2b',
@@ -3327,13 +3305,90 @@ ${rpr('Times New Roman', fontSizeHalfPt)}
       }
       return;
     }
-  }
+
+    // =========================================================================
+    // পর্যায় ১: লেআউট ডিজাইন ও মাস্টার ওয়ার্ড ফাইল (.docx) জেনারেশন
+    // (১০০% খাঁটি ইউনিকোড — কোনো প্রকার বিজয় কনভার্সন হবে না)
+    // =========================================================================
+    showToast(`মাস্টার ওয়ার্ড (.docx) ফাইল প্রস্তুত হচ্ছে...`, 'info');
+    
+    try {
+      masterDocxBlob = await generateMasterDocx(text, {
+        pageSize: pageSizeVal,
+        margin: marginVal,
+        fontSize: fontSizeVal,
+        docType: parsedDocType
+      });
+    } catch (err) {
+      console.error('Master docx generation error:', err);
+      showToast(`মাস্টার ওয়ার্ড ফাইল তৈরিতে সমস্যা: ${err.message}`, 'error');
+      throw err;
+    }
+
+    if (!masterDocxBlob) {
+      showToast('মাস্টার ওয়ার্ড ফাইল তৈরি করা যায়নি', 'error');
+      return;
+    }
+
+    // FORMAT 1: Modern Word .DOCX (Pure Unicode Master)
+    if (format === 'unicode_docx') {
+      try {
+        triggerDownload(masterDocxBlob, `${baseName}_Master_Unicode.docx`);
+        showToast(`ইউনিকোড মাস্টার .DOCX ডাউনলোড সম্পন্ন!`, 'success');
+      } catch (err) {
+        showToast(`ইউনিকোড DOCX ডাউনলোডে সমস্যা: ${err.message}`, 'error');
+        throw err;
+      }
+      return;
+    }
+
+    // =========================================================================
+    // পর্যায় ২: পরীক্ষিত কনভার্সন পাইপলাইন (মাস্টার .docx থেকে নির্দিষ্ট ফরম্যাটে রূপান্তর)
+    // =========================================================================
+
+    // FORMAT 2: Modern Word .DOCX (Bijoy SutonnyMJ via DocxHandler)
+    if (format === 'bijoy_docx') {
+      showToast(`বিজয় .DOCX তৈরি হচ্ছে...`, 'info');
+      try {
+        let bijoyBlob = null;
+        if (typeof DocxHandler !== 'undefined' && typeof DocxHandler.convertDocx === 'function') {
+          const res = await DocxHandler.convertDocx(masterDocxBlob, {
+            direction: 'u2b',
+            targetFont: 'SutonnyMJ'
+          });
+          bijoyBlob = res.convertedBlob || res.blob;
+        } else {
+          bijoyBlob = await createDocxBlob(text, true, { pageSize: pageSizeVal, margin: marginVal, fontSize: fontSizeVal });
+        }
+        triggerDownload(bijoyBlob, `${baseName}_Bijoy.docx`);
+        showToast(`বিজয় .DOCX ডাউনলোড সম্পন্ন!`, 'success');
+      } catch (err) {
+        console.error('Bijoy DOCX conversion error:', err);
+        showToast(`বিজয় DOCX তৈরিতে সমস্যা: ${err.message}`, 'error');
+        throw err;
+      }
+      return;
+    }
+
+      }
 
   /**
    * পর্যায় ১: লেআউট ডিজাইন ও মাস্টার ওয়ার্ড ফাইল (.docx) জেনারেশন
    * সর্বদা ১০০% খাঁটি ইউনিকোড — কোনো প্রকার বিজয় রূপান্তর এখানে ঘটবে না।
    */
   async function generateMasterDocx(text, customOptions = {}) {
+    if (typeof FayzarPipeline !== 'undefined' && typeof FayzarPipeline.exportDocx === 'function') {
+      try {
+        const result = await FayzarPipeline.exportDocx(text, {
+          font: customOptions.font || 'Kalpurush',
+          docType: customOptions.docType || 'EXAM_CQ',
+          ...customOptions
+        });
+        if (result && result.content) return result.content;
+      } catch (err) {
+        console.warn('FayzarPipeline exportDocx error, falling back:', err);
+      }
+    }
     if (typeof MdLayoutParser !== 'undefined' && typeof DocxLayoutBuilder !== 'undefined') {
       try {
         const detectFn = (t) => {

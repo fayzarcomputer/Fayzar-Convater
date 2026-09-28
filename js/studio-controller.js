@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  function updatePreview() {
+  async function updatePreview() {
     const raw = inputText.value.trim();
     if (!raw) {
       previewContainer.innerHTML = `<div class="text-center py-20 text-slate-400 font-medium"><i class="fas fa-file-word text-5xl mb-3 block text-blue-500/50"></i>বামপাশের বক্সে কোনো প্রশ্নপত্র বা দলিল পেস্ট করুন অথবা উপরের <b>ইনসার্ট ও টেমপ্লেট</b> থেকে নির্বাচন করুন।</div>`;
@@ -357,83 +357,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const selectedMode = modeSelect.value;
-    let docType = selectedMode;
-
-    if (selectedMode === 'AUTO') {
-      const detected = DocClassifier.classify(raw);
-      docType = detected.type;
-      detectedBadge.textContent = getDocTypeBanglaLabel(docType);
-      detectedBadge.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300';
-    } else {
-      detectedBadge.textContent = 'ম্যানুয়াল: ' + getDocTypeBanglaLabel(docType);
-      detectedBadge.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300';
-    }
-
-    activeDocType = docType;
     const font = fontSelect.value;
     const orientation = paperSizeSelect.value.includes('landscape') ? 'landscape' : 'portrait';
     const skipFirstColumn = chkSkipCol1 ? chkSkipCol1.checked : false;
-
-    // Show/hide split count ribbon group for MCQ
-    if (groupSplitCtrl) {
-      if (docType === 'EXAM_MCQ') {
-        groupSplitCtrl.classList.remove('hidden');
-      } else {
-        groupSplitCtrl.classList.add('hidden');
-      }
-    }
 
     const options = {
       font,
       orientation,
       skipFirstColumn,
+      paperSize: paperSizeSelect.value,
       marginClass: studioState.marginClass,
       fontSize: studioState.fontSizePt + 'pt',
       lineSpacing: studioState.lineSpacing,
       splitIndex: studioState.splitIndex,
-      editable: studioState.isEditing
+      editable: studioState.isEditing,
+      docType: selectedMode === 'AUTO' ? null : selectedMode
     };
 
-    if (docType === 'EXAM_CQ' || docType === 'EXAM_MATH' || docType === 'EXAM_COMBINED' || docType === 'EXAM_GENERAL') {
-      currentParsedData = QuestionEngine.parseQuestionPaper(raw);
-      previewContainer.innerHTML = QuestionEngine.renderToHtml(currentParsedData, options);
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
-    } else if (docType === 'EXAM_MCQ') {
-      currentParsedData = QuestionEngine.parseQuestionPaper(raw);
-      previewContainer.innerHTML = QuestionEngine.renderToHtml(currentParsedData, options);
-      if (btnMakeOmr) btnMakeOmr.classList.remove('hidden');
-    } else if (docType === 'STAMP_DEED') {
-      currentParsedData = StampEngine.parseDeed(raw);
-      previewContainer.innerHTML = `<div class="paper-sheet size-${paperSizeSelect.value} ${studioState.marginClass}" ${studioState.isEditing ? 'contenteditable="true" spellcheck="false"' : ''} style="font-size: ${studioState.fontSizePt}pt; line-height: ${studioState.lineSpacing};">${QuestionEngine.renderCropMarks()}${StampEngine.renderToHtml(currentParsedData, options)}</div>`;
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
-    } else if (docType === 'GOVT_APP') {
-      currentParsedData = ApplicationEngine.parseApplication(raw);
-      previewContainer.innerHTML = `<div class="paper-sheet size-${paperSizeSelect.value} ${studioState.marginClass}" ${studioState.isEditing ? 'contenteditable="true" spellcheck="false"' : ''} style="font-size: ${studioState.fontSizePt}pt; line-height: ${studioState.lineSpacing};">${QuestionEngine.renderCropMarks()}${ApplicationEngine.renderToHtml(currentParsedData, options)}</div>`;
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
-    } else if (docType === 'PROTTOYON') {
-      currentParsedData = CertificateEngine.parseCertificate(raw);
-      previewContainer.innerHTML = `<div class="paper-sheet size-${paperSizeSelect.value} ${studioState.marginClass}" ${studioState.isEditing ? 'contenteditable="true" spellcheck="false"' : ''} style="font-size: ${studioState.fontSizePt}pt; line-height: ${studioState.lineSpacing};">${QuestionEngine.renderCropMarks()}${CertificateEngine.renderToHtml(currentParsedData, options)}</div>`;
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
-    } else if (docType === 'ADMIT_CARD') {
-      if (typeof AdmitCardEngine !== 'undefined') {
-        currentParsedData = AdmitCardEngine.parseAdmitData(raw);
-        previewContainer.innerHTML = AdmitCardEngine.renderToHtml(currentParsedData, options);
-      } else {
-        previewContainer.innerHTML = `<div class="paper-sheet size-a4-portrait ${studioState.marginClass} font-kalpurush p-8 text-center text-slate-500">AdmitCardEngine লোড হয়নি।</div>`;
+    try {
+      if (typeof FayzarPipeline !== 'undefined' && typeof FayzarPipeline.previewHtml === 'function') {
+        const result = await FayzarPipeline.previewHtml(raw, options);
+        const docType = result.docType;
+        activeDocType = docType;
+        currentParsedData = result.parsedData;
+        previewContainer.innerHTML = result.content;
+
+        if (selectedMode === 'AUTO') {
+          detectedBadge.textContent = getDocTypeBanglaLabel(docType);
+          detectedBadge.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300';
+        } else {
+          detectedBadge.textContent = 'ম্যানুয়াল: ' + getDocTypeBanglaLabel(docType);
+          detectedBadge.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300';
+        }
+
+        if (btnMakeOmr) {
+          if (docType === 'EXAM_MCQ') {
+            btnMakeOmr.classList.remove('hidden');
+          } else {
+            btnMakeOmr.classList.add('hidden');
+          }
+        }
+
+        if (groupSplitCtrl) {
+          if (docType === 'EXAM_MCQ') {
+            groupSplitCtrl.classList.remove('hidden');
+          } else {
+            groupSplitCtrl.classList.add('hidden');
+          }
+        }
       }
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
-    } else if (docType === 'SALARY_SLIP') {
-      if (typeof SalarySlipEngine !== 'undefined') {
-        currentParsedData = SalarySlipEngine.parseSalaryData(raw);
-        previewContainer.innerHTML = SalarySlipEngine.renderToHtml(currentParsedData, options);
-      } else {
-        previewContainer.innerHTML = `<div class="paper-sheet size-a4-portrait ${studioState.marginClass} font-kalpurush p-8 text-center text-slate-500">SalarySlipEngine লোড হয়নি।</div>`;
-      }
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
-    } else {
-      // General formatting
-      previewContainer.innerHTML = `<div class="paper-sheet size-${paperSizeSelect.value} ${studioState.marginClass}" ${studioState.isEditing ? 'contenteditable="true" spellcheck="false"' : ''} style="font-size: ${studioState.fontSizePt}pt; line-height: ${studioState.lineSpacing};">${QuestionEngine.renderCropMarks()}<div class="text-justify leading-relaxed ${font === 'bijoy' ? 'font-sutonny' : 'font-kalpurush'}">${raw.replace(/\n/g, '<br>')}</div></div>`;
-      if (btnMakeOmr) btnMakeOmr.classList.add('hidden');
+    } catch (err) {
+      console.error('[StudioController] Preview error via FayzarPipeline:', err);
+      previewContainer.innerHTML = `<div class="p-8 text-center text-rose-500 font-bold">প্রিভিউ লোড করতে সমস্যা হয়েছে: ${err.message}</div>`;
     }
 
     applyEditModeState();
@@ -1074,7 +1049,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       let blob;
-      if (format === 'docx') {
+      if (typeof FayzarPipeline !== 'undefined' && typeof FayzarPipeline.process === 'function') {
+        const result = await FayzarPipeline.process(raw, {
+          ...options,
+          outputFormat: format,
+          docType: docType
+        });
+        blob = result.content;
+      } else if (format === 'docx') {
         blob = await ExportDualEngine.generateWordDoc(raw, docType, options);
       } else {
         blob = ExportDualEngine.generateWordDoc(raw, docType, options);

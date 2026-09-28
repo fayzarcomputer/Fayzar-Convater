@@ -132,7 +132,7 @@
         }
 
         // Question Number Match (১।, ২।, ৩। or 1., 2., 3. or ## ১।)
-        const qStartMatch = line.match(/^(?:#{1,6}\s*)?([\u09E6-\u09EF\d]+)[।.)]\s*(.*)$/);
+        const qStartMatch = line.match(/^(?:>\s*)?(?:#{1,6}\s*)?([\u09E6-\u09EF\d]+)[।.)]\s*(.*)$/);
         if (qStartMatch) {
           if (currentQuestion) {
             currentSection.questions.push(currentQuestion);

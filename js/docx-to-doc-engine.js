@@ -462,6 +462,7 @@
       let marginLeft = "0.6in";
       let marginRight = "0.6in";
       let cols = 1;
+      let colSpace = "0.2in";
 
       if (opts.pageSize === 'legal') {
         width = "8.5in";
@@ -517,6 +518,10 @@
         const colsEl = sectPr.querySelector("cols");
         if (colsEl) {
           cols = parseInt(colsEl.getAttribute("w:num") || colsEl.getAttribute("num") || "1", 10);
+          const spaceTwips = parseInt(colsEl.getAttribute("w:space") || colsEl.getAttribute("space"), 10);
+          if (spaceTwips) {
+            colSpace = (spaceTwips / 1440).toFixed(2) + "in";
+          }
         }
       }
 
@@ -527,7 +532,8 @@
         marginBottom,
         marginLeft,
         marginRight,
-        cols
+        cols,
+        colSpace
       };
     }
 
@@ -599,7 +605,11 @@
             const val = tn.getAttribute("w:val") || tn.getAttribute("val") || "left";
             if (pos) {
               const ptVal = (parseInt(pos, 10)/20).toFixed(1) + "pt";
-              tabStops.push(`${val} ${ptVal}`);
+              if (val === 'left' || val === 'clear') {
+                tabStops.push(ptVal);
+              } else {
+                tabStops.push(`${val} ${ptVal}`);
+              }
             }
           }
           if (tabStops.length > 0) {
@@ -753,6 +763,43 @@
             runCount++;
           }
         } else if (childName === 'drawing' || childName === 'pict' || childName === 'shape') {
+          // Parse VML Textboxes
+          const txbxContent = child.querySelector('txbxContent, *|txbxContent');
+          if (txbxContent) {
+            let innerHtml = '';
+            const txbxChildren = txbxContent.childNodes;
+            for (let j = 0; j < txbxChildren.length; j++) {
+              const cn = txbxChildren[j];
+              if (cn.nodeType !== 1) continue;
+              const localName = cn.localName || cn.nodeName.split(':').pop();
+              if (localName === 'p') {
+                const pData = this._parseParagraph(cn, styleResolver, mediaMap, opts);
+                innerHtml += pData.html + '\n';
+              } else if (localName === 'tbl') {
+                const tData = this._parseTable(cn, styleResolver, mediaMap, opts);
+                innerHtml += tData.html + '\n';
+              }
+            }
+
+            const shapeNode = child.querySelector('shape, *|shape');
+            const shapetypeNode = child.querySelector('shapetype, *|shapetype');
+            
+            let vmlHtml = '<!--[if gte vml 1]>';
+            if (shapetypeNode) {
+               vmlHtml += shapetypeNode.outerHTML;
+            }
+            if (shapeNode) {
+               let shapeOuter = shapeNode.outerHTML;
+               // Word HTML expects standard HTML inside <v:textbox> instead of Word XML
+               shapeOuter = shapeOuter.replace(/(<v:textbox[^>]*>).*?(<\/v:textbox>)/is, `$1\n<table cellpadding=0 cellspacing=0 width="100%"><tr><td>${innerHtml}</td></tr></table>\n$2`);
+               vmlHtml += shapeOuter;
+            }
+            vmlHtml += '<![endif]-->';
+            
+            runsHtml.push(vmlHtml);
+            runCount++;
+          }
+
           const imgs = this._extractImagesFromNode(child, mediaMap);
           if (imgs) {
             runsHtml.push(imgs);
@@ -1120,7 +1167,7 @@
         const secIndex = idx + 1;
         const page = sec.pageSettings;
         const colsCss = page.cols >= 2
-          ? `\tmso-columns:${page.cols} even 0.2in;\n\tmso-column-separator:solid;\n`
+          ? `\tmso-columns:${page.cols} even ${page.colSpace || '0.2in'};\n\tmso-column-separator:solid;\n`
           : '';
 
         pageStylesCss += ` @page Section${secIndex}

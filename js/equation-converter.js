@@ -787,12 +787,67 @@
       return r;
     }
 
+    static normalizeUnicodeMathToLatex(text) {
+      if (!text) return text;
+      
+      let segments = [];
+      let lastIndex = 0;
+      const regex = /\$\$([\s\S]*?)\$\$|\$([^\$]+?)\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          segments.push({ type: 'text', value: text.substring(lastIndex, match.index) });
+        }
+        segments.push({ type: 'math', value: match[0] });
+        lastIndex = regex.lastIndex;
+      }
+      if (lastIndex < text.length) {
+        segments.push({ type: 'text', value: text.substring(lastIndex) });
+      }
+      
+      let out = '';
+      const chemRegex = /\b(?:(?:H|He|Li|Be|B|C|N|O|F|Ne|Na|Mg|Al|Si|P|S|Cl|Ar|K|Ca|Sc|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Br|Ag|I|Ba|Pt|Au|Hg|Pb|U)[a-z]?\d*)+\b/g;
+      
+      for (const seg of segments) {
+        if (seg.type === 'math') {
+          out += seg.value;
+        } else {
+          let s = seg.value;
+          
+          s = s.replace(chemRegex, m => {
+             if (/[A-Z]/.test(m) && /\d/.test(m)) {
+                return '$' + m.replace(/(\d+)/g, '_$1') + '$';
+             }
+             return m;
+          });
+          
+          s = s.replace(/([A-Za-z0-9])²/g, '$$$1^2$$');
+          s = s.replace(/([A-Za-z0-9])³/g, '$$$1^3$$');
+          s = s.replace(/×/g, '$\\times$');
+          s = s.replace(/÷/g, '$\\div$');
+          s = s.replace(/±/g, '$\\pm$');
+          s = s.replace(/≤/g, '$\\le$');
+          s = s.replace(/≥/g, '$\\ge$');
+          s = s.replace(/≠/g, '$\\neq$');
+          s = s.replace(/≈/g, '$\\approx$');
+          s = s.replace(/∞/g, '$\\infty$');
+          s = s.replace(/√([A-Za-z0-9]+)/g, '$\\sqrt{$1}$');
+          s = s.replace(/√/g, '$\\sqrt{}$');
+          
+          out += s;
+        }
+      }
+      return out;
+    }
+
     /**
      * Splits a mixed string of text and LaTeX math into segments.
      */
     static splitTextAndMath(text) {
       const segments = [];
       if (!text) return segments;
+
+      text = EquationConverter.normalizeUnicodeMathToLatex(text);
 
       // Normalize backtick-wrapped math: `$ ... $` -> $ ... $
       text = text.replace(/`(\$\$[\s\S]*?\$\$|\$[^`\r\n]+?\$)`/g, '$1');

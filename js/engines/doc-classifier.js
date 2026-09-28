@@ -73,7 +73,7 @@
           return { type: this.DOC_TYPES.GOVT_APP, confidence: 1.0, reason: 'Sector: GOVT_APP' };
         }
         if (detectedDocType === 'OFFICIAL_NOTICE' || detectedDocType === 'NOTICE') {
-          return { type: this.DOC_TYPES.GENERAL, confidence: 1.0, reason: 'Sector: OFFICIAL_NOTICE' };
+          return { type: this.DOC_TYPES.OFFICIAL_NOTICE, confidence: 1.0, reason: 'Sector: OFFICIAL_NOTICE' };
         }
         if (detectedDocType === 'LEGAL_DEED' || detectedDocType === 'STAMP_DEED' || detectedDocType === 'DEED') {
           return { type: this.DOC_TYPES.STAMP_DEED, confidence: 1.0, reason: 'Sector: LEGAL_DEED' };
@@ -100,6 +100,7 @@
       // Keyword & Pattern Scoring
       let cqScore = 0;
       let mcqScore = 0;
+      let generalScore = 0;
       let stampScore = 0;
       let appScore = 0;
       let certScore = 0;
@@ -107,37 +108,28 @@
       let salaryScore = 0;
       let padScore = 0;
       let routineScore = 0;
+      let noticeScore = 0;
+      let cvScore = 0;
 
-      // STRICT CQ vs GENERAL GATE:
-      // A document is ONLY EXAM_CQ if it explicitly contains 'সৃজনশীল' or 'উদ্দীপক' or has 4-tier sub-questions with marks!
-      if (/সৃজনশীল|উদ্দীপক|দৃশ্যকল্প/i.test(t)) {
-        cqScore += 30;
-      } else if (isStrictMcq) {
-        mcqScore += 35; // Pure MCQ paper
-      } else if (/শ্রেণি|বিষয়|সময়|পূর্ণমান|পরীক্ষা/.test(t) || totalQCount > 0) {
-        // Standard 2-column general question paper (Class 1-5 / short questions / primary)
-        // Classified as EXAM_GENERAL so it NEVER gets forced into CQ!
-        return { type: this.DOC_TYPES.EXAM_GENERAL, confidence: 0.85, reason: 'সাধারণ/প্রাথমিক প্রশ্নপত্র' };
-      }
+      // Stamp patterns (requires deed co-occurrence so questions with "৩০০ টাকা" or "মৌজা" don't trigger stamp)
+      if (/(?:৩০০|তিনশত)\s*টাকার\s*স্ট্যাম্প|স্ট্যাম্প\s*অ্যাক্ট|অঙ্গীকার\s*নামা|বায়নানামা|চুক্তিপত্র|দলিল\s*পত্র/i.test(t)) stampScore += 8;
+      if (/তফসিল|মৌজা|খতিয়ান|দাগ\s*নং/.test(t) && /১ম\s*পক্ষ|২য়\s*পক্ষ|প্রথম\s*পক্ষ|দ্বিতীয়\s*পক্ষ|লিখিতং|চুক্তি/i.test(t)) stampScore += 6;
+      if (/১ম\s*পক্ষ|২য়\s*পক্ষ|প্রথম\s*পক্ষ|দ্বিতীয়\s*পক্ষ|লিখিতং/.test(t) && !/পরীক্ষা|প্রশ্ন|পূর্ণমান/.test(t)) stampScore += 4;
 
-      if (/ক\.\s*[^\n]+\s*খ\.\s*[^\n]+\s*গ\./.test(t) && !/সৃজনশীল/.test(t)) {
-        cqScore += 8;
-      }
-      if (/[\u09E7-\u09EF\d]+\s*[+\-xX×=]\s*[\u09E7-\u09EF\d]+/.test(t)) cqScore += 3;
-
-      // Stamp patterns
-      if (/৩০০|তিনশত|স্ট্যাম্প|অঙ্গীকার\s*নামা|বায়নানামা|চুক্তিপত্র|তফসিল|মৌজা|খতিয়ান|দাগ\s*নং/.test(t)) stampScore += 5;
-      if (/১ম\s*পক্ষ|২য়\s*পক্ষ|প্রথম\s*পক্ষ|দ্বিতীয়\s*পক্ষ|লিখিতং|বরাবর/i.test(t)) stampScore += 3;
-
-      // Application patterns
-      if (/বরাবর[,:\s]/.test(t) && /বিষয়[:\s]/.test(t)) appScore += 6;
-      if (/বিনীত\s*নিবেদন|মহোদয়|জনাব|অতএব,\s*বিনীত|নিবেদক/i.test(t)) appScore += 4;
+      // Application patterns (requires formal structural co-occurrence, "জনাব রহমান একজন ব্যবসায়ী" will not trigger)
+      if (/বরাবর[,:\s]/.test(t) && /বিষয়[:\s]/.test(t)) appScore += 8;
+      if (/বিনীত\s*নিবেদন|অতএব,\s*বিনীত|নিবেদক/i.test(t)) appScore += 6;
+      if (/(?:মহোদয়|জনাব)[,:\s]/.test(t) && /আবেদন|নিবেদন|অনুরোধ|প্রার্থনা/i.test(t)) appScore += 4;
 
       // Certificate patterns
       if (/প্রত্যয়নপত্র|অভিজ্ঞতার\s*সনদ|প্রশংসাপত্র|এই\s*মর্মে\s*প্রত্যয়ন|ছাড়পত্র/.test(t)) certScore += 7;
 
-      // Pad patterns
-      if (/মেসার্স|প্রোঃ|মোবাইলঃ|সূত্র[:\s\-]|বিসমিল্লাহির/i.test(t) && !/বরাবর/.test(t)) padScore += 5;
+      // Pad patterns (Office letterhead / pad)
+      const hasExamContext = /শ্রেণি|পূর্ণমান|সময়|পরীক্ষা|প্রশ্নপত্র/i.test(t) || totalQCount >= 2;
+      if (!hasExamContext) {
+        if (/মেসার্স|প্রোঃ|প্রোপাইটর|মোবাইলঃ|বিসমিল্লাহির\s*রহমানির/i.test(t) && !/বরাবর/.test(t)) padScore += 6;
+        if (/(?:সূত্র|স্মারক|রেফ|Ref)\s*(?:নং|নম্বর)?[:\s\-]/i.test(t) && /তারিখ/i.test(t) && !/বরাবর/.test(t)) padScore += 5;
+      }
 
       // Routine patterns
       if (/ক্লাস\s*রুটিন|সময়সূচী|পিরিয়ড|১ম-ঘণ্টা|১ম\s*ঘণ্টা/.test(t)) routineScore += 6;
@@ -152,17 +144,59 @@
       if (/মূল\s*বেতন|বাড়ি\s*ভাড়া\s*ভাতা|নিট\s*বেতন/i.test(t)) salaryScore += 6;
       if (/ভবিষ্যৎ\s*তহবিল|আয়কর/i.test(t) && /বেতন|মাস/i.test(t)) salaryScore += 4;
 
+      // Notice patterns
+      if (/বিজ্ঞপ্তি|নোটিশ|অফিস\s*আদেশ|জরুরি\s*বিজ্ঞপ্তি/i.test(t)) noticeScore += 6;
+      if (/স্মারক\s*নং|জ্ঞাতার্থে|সদয়\s*অবগতি|অনুলিপি/i.test(t)) noticeScore += 4;
+
+      // CV/Resume patterns (deduplicated)
+      if (/জীবনবৃত্তান্ত|বায়োডাটা|কারিকুলাম\s*ভিটা|CURRICULUM\s*VITAE|RESUME|পিতার\s*নাম.*মাতার\s*নাম|শিক্ষাগত\s*যোগ্যতা/i.test(t)) cvScore += 8;
+      if (/ব্যক্তিগত\s*তথ্য|পেশাগত\s*অভিজ্ঞতা|কর্মঅভিজ্ঞতা|দক্ষতা\s*সমূহ|জাতীয়তা|জাতীয়তা|স্থায়ী\s*ঠিকানা|স্থায়ী\s*ঠিকানা|বর্তমান\s*ঠিকানা|REFERENCE/i.test(t)) cvScore += 5;
+      if (/পরীক্ষার\s*নাম.*পাশের\s*সন|বোর্ড\/বিশ্ববিদ্যালয়|বোর্ড\/বিশ্ববিদ্যালয়/i.test(t)) cvScore += 4;
+
+      // Specialized document gate: only high-fidelity non-exam document types bypass the exam gate
+      const maxSpecialScore = Math.max(
+        cvScore, appScore, stampScore, certScore,
+        noticeScore, routineScore, salaryScore, admitScore
+      );
+
+      // STRICT CQ vs GENERAL vs MCQ SCORING (Eliminated Early-Return: pure unified scoring)
+      if (maxSpecialScore < 4) {
+        if (/সৃজনশীল|উদ্দীপক|দৃশ্যকল্প/i.test(t)) {
+          cqScore += 30;
+        } else if (isStrictMcq) {
+          mcqScore += 35; // Pure MCQ paper
+        } else if ((/শ্রেণি|সময়|পূর্ণমান/.test(t) && /পরীক্ষা|বিষয়/.test(t)) || totalQCount >= 2 || (/পরীক্ষা/.test(t) && totalQCount > 0)) {
+          generalScore += 25;
+        } else if (/শ্রেণি|বিষয়|সময়|পূর্ণমান|পরীক্ষা/.test(t) || totalQCount > 0) {
+          generalScore += 15;
+        }
+      } else {
+        if (/সৃজনশীল|উদ্দীপক|দৃশ্যকল্প/i.test(t)) {
+          cqScore += 30;
+        } else if (isStrictMcq) {
+          mcqScore += 35;
+        }
+      }
+
+      if (/ক\.\s*[^\n]+\s*খ\.\s*[^\n]+\s*গ\./.test(t) && !/সৃজনশীল/.test(t)) {
+        cqScore += 8;
+      }
+      if (/[\u09E7-\u09EF\d]+\s*[+\-xX×=]\s*[\u09E7-\u09EF\d]+/.test(t)) cqScore += 3;
+
       const scores = [
         { type: this.DOC_TYPES.EXAM_COMBINED, score: combinedScore },
         { type: this.DOC_TYPES.EXAM_CQ, score: cqScore },
         { type: this.DOC_TYPES.EXAM_MCQ, score: mcqScore },
+        { type: this.DOC_TYPES.EXAM_GENERAL, score: generalScore },
         { type: this.DOC_TYPES.STAMP_DEED, score: stampScore },
         { type: this.DOC_TYPES.GOVT_APP, score: appScore },
         { type: this.DOC_TYPES.PROTTOYON, score: certScore },
         { type: this.DOC_TYPES.ADMIT_CARD, score: admitScore },
         { type: this.DOC_TYPES.SALARY_SLIP, score: salaryScore },
         { type: this.DOC_TYPES.OFFICE_PAD, score: padScore },
-        { type: this.DOC_TYPES.ROUTINE, score: routineScore }
+        { type: this.DOC_TYPES.OFFICIAL_NOTICE, score: noticeScore },
+        { type: this.DOC_TYPES.ROUTINE, score: routineScore },
+        { type: this.DOC_TYPES.CV_RESUME, score: cvScore }
       ];
 
       scores.sort((a, b) => b.score - a.score);
